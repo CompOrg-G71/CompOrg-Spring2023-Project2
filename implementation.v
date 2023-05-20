@@ -372,22 +372,26 @@ input      Clock
     wire [7:0] ALU_Out;
     wire [7:0] ARF_OutA, ARF_OutB;
     wire [15:0] IR_Out;
-    
-    part2c_ARF ARF(Clock, MuxBOut, ARF_OutASel, ARF_OutBSel, ARF_FunSel, ARF_RSel, ARF_OutA, ARF_OutB);
 
-    mux_4to1 MuxA(Clock, MuxASel, ALU_Out, MemOut, IR_Out[7:0], ARF_OutA, MuxAOut);
-
-    mux_4to1 MuxB(Clock, MuxBSel, ALU_Out, MemOut, IR_Out[7:0], ARF_OutA, MuxBOut);
+    wire [7:0] IR_Out_L;
 
     part2b_RF RF(Clock, MuxAOut, RF_O1Sel, RF_O2Sel, RF_FunSel, RF_RSel, RF_TSel, RF_O1, RF_O2);
-
-    mux_2to1 MuxC(Clock, MuxCSel, RF_O1, ARF_OutA, MuxCOut);
-
-    part3_ALU ALU(Clock, MuxCOut, RF_O2, ALU_FunSel, ALU_Out, ALU_FlagOut);
+    
+    part2c_ARF ARF(Clock, MuxBOut, ARF_OutASel, ARF_OutBSel, ARF_FunSel, ARF_RSel, ARF_OutA, ARF_OutB);
 
     Memory Mem(Clock, ARF_OutB, ALU_Out, Mem_WR, Mem_CS, MemOut);
 
     part2a_IRreg IR(Clock, MemOut, IR_FunSel, IR_LH, IR_Enable, IR_Out);
+
+    assign IR_Out_L = IR_Out[7:0];
+
+    mux_4to1 MuxA(Clock, MuxASel, ALU_Out, MemOut, IR_Out_L, ARF_OutA, MuxAOut);
+
+    mux_4to1 MuxB(Clock, MuxBSel, ALU_Out, MemOut, IR_Out_L, ARF_OutA, MuxBOut);
+
+    mux_2to1 MuxC(Clock, MuxCSel, RF_O1, ARF_OutA, MuxCOut);
+
+    part3_ALU ALU(Clock, MuxCOut, RF_O2, ALU_FunSel, ALU_Out, ALU_FlagOut);
 
 
 endmodule
@@ -469,7 +473,7 @@ endmodule
 
 
 module ControlUnit(
-    input [7:0] T,
+    input T0, T1, T2, T3, T4, T5, T6, T7,
     input AND,
     input OR,
     input NOT,
@@ -495,7 +499,6 @@ module ControlUnit(
 
     input Z, C, N, O,
 
-
     output wire SeqCounter_Reset,
 
     output wire [2:0] RF_O1Sel, 
@@ -519,30 +522,116 @@ module ControlUnit(
 );
 
 
-
+    // Register File
     reg [2:0] temp_RF_O1Sel;
     reg [2:0] temp_RF_O2Sel;
     reg [1:0] temp_RF_FunSel;
     reg [3:0] temp_RF_RSel;
     reg [3:0] temp_RF_TSel;
+
+    //ALU
     reg [3:0] temp_ALU_FunSel;
+
+    //Address Register File
     reg [1:0] temp_ARF_OutASel;
     reg [1:0] temp_ARF_OutBSel;
     reg [1:0] temp_ARF_FunSel;
     reg [3:0] temp_ARF_RSel;
+
+    //Instruction Register
     reg       temp_IR_LH;
     reg       temp_IR_Enable;
     reg [1:0] temp_IR_FunSel;
+
+    //Memory
     reg       temp_Mem_WR;
     reg       temp_Mem_CS;
+
+    //Multiplexers
     reg [1:0] temp_MuxASel;
     reg [1:0] temp_MuxBSel;
     reg       temp_MuxCSel;
 
-    reg temP_SeqCounter_Reset = 1'b0;
+    reg temp_SeqCounter_Reset = 1'b0;
 
 
+    always@(*) begin 
+
+        if(T7) begin 
+
+            temp_IR_Enable = 1'b1;
+            temp_IR_FunSel = 2'b00;
+
+            temp_RF_RSel = 4'b1111;
+            temp_RF_TSel = 4'b1111;
+            temp_RF_FunSel = 2'b00;
+
+            temp_ARF_RSel = 4'b1111;
+            temp_ARF_FunSel = 2'b00;
+
+            temp_Mem_CS = 1'b1;
+        end
 
 
+        //Load LSB of M[PC] to IR and increment PC by one
+        else if(T0) begin
+            temp_SeqCounter_Reset = 1'b0;
+
+            temp_IR_LH = 1'b0;
+            temp_IR_Enable = 1'b1;
+            temp_IR_FunSel = 2'b01;
+
+            temp_RF_RSel = 4'b0000;
+            temp_RF_TSel = 4'b0000;
+
+            temp_ARF_RSel = 4'b1000; // Selecting PC
+            temp_ARF_FunSel = 2'b11; // Incrementing PC
+
+            temp_Mem_CS = 1'b0;
+            temp_Mem_WR = 1'b0;
+
+        end
+
+        else if(T1) begin 
+            temp_SeqCounter_Reset = 1'b0;
+
+            temp_IR_LH = 1'b1;
+            temp_IR_Enable = 1'b1;
+            temp_IR_FunSel = 2'b01;
+
+            temp_RF_RSel = 4'b0000;
+            temp_RF_TSel = 4'b0000;
+
+            temp_ARF_RSel = 4'b1000; // Selecting PC
+            temp_ARF_FunSel = 2'b11; // Incrementing PC
+
+            temp_Mem_CS = 1'b0;
+            temp_Mem_WR = 1'b0;
+        end
+
+
+    end
+
+
+    assign RF_O1Sel = temp_RF_O1Sel;
+    assign RF_O2Sel = temp_RF_O2Sel;
+    assign RF_FunSel = temp_RF_FunSel;
+    assign RF_RSel = temp_RF_RSel;
+    assign RF_TSel = temp_RF_TSel;
+    assign ALU_FunSel = temp_ALU_FunSel;
+    assign ARF_OutASel = temp_ARF_OutASel;
+    assign ARF_OutBSel = temp_ARF_OutBSel;
+    assign ARF_FunSel = temp_ARF_FunSel;
+    assign ARF_RSel = temp_ARF_RSel;
+    assign IR_LH = temp_IR_LH;
+    assign IR_Enable = temp_IR_Enable;
+    assign IR_FunSel = temp_IR_FunSel;
+    assign Mem_WR = temp_Mem_WR;
+    assign Mem_CS = temp_Mem_CS;
+    assign MuxASel = temp_MuxASel;
+    assign MuxBSel = temp_MuxBSel;
+    assign MuxCSel = temp_MuxCSel;
+
+    assign SeqCounter_Reset = temp_SeqCounter_Reset;
 
 endmodule
