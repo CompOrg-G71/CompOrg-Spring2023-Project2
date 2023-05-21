@@ -658,7 +658,7 @@ module ControlUnit(
 
             end
 
-            if(LD & ~AddressMode) begin // "Immediate" Version of LD Operation
+            else if(LD & ~AddressMode) begin // "Immediate" Version of LD Operation
 
                 temp_Mem_CS = 1'b1; // Disabling memory
                 temp_ARF_RSel = 4'b0000; // Disabling all register in ARF
@@ -678,7 +678,7 @@ module ControlUnit(
 
             end
 
-            if(ST & AddressMode) begin //Write data in Register determined by REGSEL to M[AR] (Direct)
+            else if(ST & AddressMode) begin //Write data in Register determined by REGSEL to M[AR] (Direct)
 
                 temp_IR_Enable = 1'b0; // no writing to IR
 
@@ -752,10 +752,16 @@ module ControlUnit(
                 end
                 
 
-                if(LSL | LSR) begin  //Logical Shifts have the same procedure except for the ALU function select
+                if( LSL | LSR | MOV | AND | OR | NOT | ADD ) begin // all of these operations finish in T2 and are assigned SREG1 and DSTREG in the same way.
 
                     if(LSL) temp_ALU_FunSel = 4'b1011; // LSL operation
                     else if(LSR) temp_ALU_FunSel = 4'b1100; // LSR operation
+                    else if(MOV) temp_ALU_FunSel = 4'b0000; // Passing Output of MuxC Directly to OutALU
+                    else if (AND) temp_ALU_FunSel = 4'b0111; // AND operation
+                    else if (OR) temp_ALU_FunSel = 4'b1000; // OR operation
+                    else if (NOT) temp_ALU_FunSel = 4'b0010; // NOT operation
+                    else if (ADD) temp_ALU_FunSel = 4'b0100; // ADD operation 
+
 
                     if(~SREG1[2]) begin 
                         temp_MuxCSel = 1'b0; // Selecting RF_O1 as input to ALU
@@ -773,133 +779,16 @@ module ControlUnit(
                         temp_MuxBSel = 2'b00; // Selecting ALU output as input to ARF
                     end
 
-                    temp_SC_reset = 1'b1; //Counter reset is 1 because LSL and LSR instruction is finished in 1 clock cycle
-                end
-
-                else if(MOV) begin // LOAD SREG1 into DSTREG
-
-                    temp_ALU_FunSel = 4'b0000; // Passing Output of MuxC Directly to OutALU
-
-                    if(~SREG1[2]) begin // if SREG1 is in RF
-                        temp_MuxCSel = 1'b0; // Selecting RF_O1 as input to ALU
-                    end
-                    else if (SREG1[2]) begin  // if SREG1 is in ARF
-                        temp_MuxCSel = 1'b1; // Selecting ARF_OutA as input to ALU
-                    end
-
-                    if(~DSTREG[2]) begin  // if not DSTREG[2], then the destination is RF
-                        temp_RF_FunSel = 2'b01; // Writing ALU output to RF
-                        temp_MuxASel = 2'b00; // Selecting ALU output as input to RF
-                    end
-                    else (DSTREG[2]) begin // if DSTREG[2], then the destination is ARF
-                        temp_ARF_FunSel = 2'b01; // Writing ALU output to ARF
-                        temp_MuxBSel = 2'b00; // Selecting ALU output as input to ARF
-                    end
-
-                    temp_SC_reset = 1'b1; //Counter reset is 1 because MOV instruction is finished in 1 clock cycle
-                end
-
-                else if (AND) begin 
-
-                    temp_ALU_FunSel = 4'b0111; // AND operation
-
-                    if(~SREG1[2]) begin // if SREG1 is in RF
-                        temp_MuxCSel = 1'b0; // Selecting RF_O1 as input to ALU
-                    end
-                    else if (SREG1[2]) begin  // if SREG1 is in ARF
-                        temp_MuxCSel = 1'b1; // Selecting ARF_OutA as input to ALU
-                    end
-
-                    if(~DSTREG[2]) begin  // if not DSTREG[2], then the destination is RF
-                        temp_RF_FunSel = 2'b01; // Writing ALU output to RF
-                        temp_MuxASel = 2'b00; // Selecting ALU output as input to RF
-                    end
-                    else (DSTREG[2]) begin // if DSTREG[2], then the destination is ARF
-                        temp_ARF_FunSel = 2'b01; // Writing ALU output to ARF
-                        temp_MuxBSel = 2'b00; // Selecting ALU output as input to ARF
-                    end
-
-
-                    temp_SC_reset = 1'b1; //Counter reset is 1 because AND instruction is finished in 1 clock cycles
-                end
-
-                else if (OR) begin 
-
-                    temp_ALU_FunSel = 4'b1000; // OR operation
-
-                    if(~SREG1[2]) begin // if SREG1 is in RF
-                        temp_MuxCSel = 1'b0; // Selecting RF_O1 as input to ALU
-                    end
-                    else if (SREG1[2]) begin  // if SREG1 is in ARF
-                        temp_MuxCSel = 1'b1; // Selecting ARF_OutA as input to ALU
-                    end
-
-                    if(~DSTREG[2]) begin  // if not DSTREG[2], then the destination is RF
-                        temp_RF_FunSel = 2'b01; // Writing ALU output to RF
-                        temp_MuxASel = 2'b00; // Selecting ALU output as input to RF
-                    end
-                    else (DSTREG[2]) begin // if DSTREG[2], then the destination is ARF
-                        temp_ARF_FunSel = 2'b01; // Writing ALU output to ARF
-                        temp_MuxBSel = 2'b00; // Selecting ALU output as input to ARF
-                    end
-
-                    temp_SC_reset = 1'b1; //Counter reset is 1 because OR instruction is finished in 1 clock cycles
+                    temp_SC_reset = 1'b1; //Counter reset is 1 because all of these instructions are finished in 1 clock cycle
 
                 end
 
-                else if (NOT) begin 
+                else if (SUB) begin 
 
-                    temp_ALU_FunSel = 4'b0010; // NOT operation
-
-                    if(~SREG1[2]) begin // if SREG1 is in RF
-                        temp_MuxCSel = 1'b0; // Selecting RF_O1 as input to ALU
-                    end
-                    else if (SREG1[2]) begin  // if SREG1 is in ARF
-                        temp_MuxCSel = 1'b1; // Selecting ARF_OutA as input to ALU
-                    end
-
-                    if(~DSTREG[2]) begin  // if not DSTREG[2], then the destination is RF
-                        temp_RF_FunSel = 2'b01; // Writing ALU output to RF
-                        temp_MuxASel = 2'b00; // Selecting ALU output as input to RF
-                    end
-                    else (DSTREG[2]) begin // if DSTREG[2], then the destination is ARF
-                        temp_ARF_FunSel = 2'b01; // Writing ALU output to ARF
-                        temp_MuxBSel = 2'b00; // Selecting ALU output as input to ARF
-                    end
-
-                    temp_SC_reset = 1'b1; //Counter reset is 1 because NOT instruction is finished in 1 clock cycles
-
-                end
-
-                else if (ADD) begin 
-
-                    temp_ALU_FunSel = 4'b0100; // ADD operation
-
-                    if(~SREG1[2]) begin // if SREG1 is in RF
-                        temp_MuxCSel = 1'b0; // Selecting RF_O1 as input to ALU
-                    end
-                    else if (SREG1[2]) begin  // if SREG1 is in ARF
-                        temp_MuxCSel = 1'b1; // Selecting ARF_OutA as input to ALU
-                    end
-
-                    if(~DSTREG[2]) begin  // if not DSTREG[2], then the destination is RF
-                        temp_RF_FunSel = 2'b01; // Writing ALU output to RF
-                        temp_MuxASel = 2'b00; // Selecting ALU output as input to RF
-                    end
-                    else (DSTREG[2]) begin // if DSTREG[2], then the destination is ARF
-                        temp_ARF_FunSel = 2'b01; // Writing ALU output to ARF
-                        temp_MuxBSel = 2'b00; // Selecting ALU output as input to ARF
-                    end
-
-                    temp_SC_reset = 1'b1;
-                end
-
-                else if(SUB) begin 
                     
+
                 end
-
-
-
+                    
             end
 
         end
@@ -907,8 +796,6 @@ module ControlUnit(
         else if (T3) begin 
             
         end
-
-
 
 
     end
