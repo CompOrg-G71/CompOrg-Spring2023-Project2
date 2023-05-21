@@ -491,13 +491,13 @@ module ControlUnit(
     input PUL,
     input PSH,
 
-    input [1:0] RSel,
+    input [1:0] RSEL,
     input [3:0] DSTREG,
     input [3:0] SREG1,
     input [3:0] SREG2,
-    input AdrsMode,
+    input AddressMode,
 
-    input Z, C, N, O,
+    input Z_Flag, C_Flag, N_Flag, O_Flag,
 
     output wire SeqCounter_Reset,
 
@@ -608,6 +608,100 @@ module ControlUnit(
             temp_Mem_CS = 1'b0;
             temp_Mem_WR = 1'b0;
         end
+
+        if(T2) begin // Conditions for second clock cycle
+
+            //Constraints before moving on, this ensures that conditions for some operations are met before executing, if not, the sequence counter is reset.
+            if((BRA & AddressMode) | (BNE & AddressMode) | (ST & ~AddressMode) | (BNE & Z_Flag))begin
+                temp_SC_reset <= 1'b1;
+                temp_RF_RSel <= 4'b1111;
+                temp_ARF_RSel = 3'b111;
+                temp_IR_Enable = 1'b0;
+                rMem_CS = 1'b1;
+            end
+
+            else if(~AddressMode & ((BRA) | (BNE & ~Z_Flag)))begin // Load LSB of IR to PC
+
+                temp_MuxBSel = 2'b10;
+                temp_ARF_RSel = 3'b100;
+                temp_ARF_FunSel = 2'b01;
+                temp_SC_reset = 1'b1; //Counter reset is 1 because BRA instruction is finished in 1 clock cycle
+
+                // Disable IR, Memory, and Register File
+                temp_IR_Enable = 1'b0;
+                temp_RF_RSel = 4'b0000;
+                temp_Mem_CS = 1'b1;
+
+            end
+
+            else if(LD & AddressMode) begin //Direct Version of LD Operation
+
+                temp_IR_Enable = 1'b0;
+
+                temp_ARF_RSel = 3'b000; // Disabling all register in ARF
+                temp_ARF_OutBSel = 2'b00; // Selecting the AR Register as output to memory address
+
+                temp_Mem_WR = 1'b0; // Reading from memory
+                temp_Mem_CS = 1'b0; // Enabling memory
+
+                temp_MuxASel = 2'b01; // Selecting Data from memory to input into RF
+
+                temp_RF_FunSel = 2'b01; // Writing to RF
+
+                temp_SC_reset = 1'b1; //Counter reset is 1 because LD instruction is finished in 1 clock cycle
+
+                //Selecting the RF Register to load to based on REGSEL
+                if(REGSEL == 2'b00)      temp_RF_RSel <= 4'b1000
+                else if(REGSEL == 2'b01) temp_RF_RSel <= 4'b0100;
+                else if(REGSEL == 2'b10) temp_RF_RSel <= 4'b0010;
+                else if(REGSEL == 2'b11) temp_RF_RSel <= 4'b0001;
+
+            end
+
+            if(LD & ~AddressMode) begin // "Immediate" Version of LD Operation
+
+                temp_Mem_CS = 1'b1; // Disabling memory
+                temp_ARF_RSel = 3'b000; // Disabling all register in ARF
+
+                temp_MuxASel = 2'b10; // Selecting IR(7-0) as input to RF
+                temp_IR_Enable = 1'b0; // no writing to IR
+
+                temp_RF_FunSel = 2'b01; // Writing to RF
+
+                temp_SC_reset = 1'b1; //Counter reset is 1 because LD instruction is finished in 1 clock cycle
+
+                //Selecting the RF Register to load to based on REGSEL
+                if(REGSEL == 2'b00)      temp_RF_RSel <= 4'b1000
+                else if(REGSEL == 2'b01) temp_RF_RSel <= 4'b0100;
+                else if(REGSEL == 2'b10) temp_RF_RSel <= 4'b0010;
+                else if(REGSEL == 2'b11) temp_RF_RSel <= 4'b0001;
+
+            end
+
+            if(ST & AddressMode) begin //Write data in Register determined by REGSEL to M[AR] (Direct)
+
+                temp_IR_Enable = 1'b0; // no writing to IR
+
+                temp_RF_O2Sel = {1'b1, REGSEL}; // Selecting the RF Register to write to memory based on REGSEL
+                temp_RF_RSel = 4'b0000; // Disabling RF
+
+                temp_ALU_FunSel = 3'b001; // OutALU is O2Sel into memory data input
+                temp_ARF_OutBSel = 2'b00; // Selecting the AR Register as output to memory address input
+
+                temp_ARF_RSel = 3'b000; // Selecting AR Register as input to memory address input
+
+                temp_Mem_WR = 1'b1; // Writing to memory
+                temp_Mem_CS = 1'b0; // Enabling memory
+
+                temp_SC_reset = 1'b1; //Counter reset is 1 because ST instruction is finished in 1 clock cycle
+
+            end
+
+
+
+        end
+
+
 
 
     end
