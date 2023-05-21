@@ -233,7 +233,7 @@ module part3_ALU (input clk, input [7:0] A, input [7:0] B, input [3:0] FunSel, o
             else Flags[0] = 0;
         end
         else if(FunSel == 4'b0101)begin
-            {cout, OutALU} = {1'b0, A} + {1'b0, B_neg}; // TODO: check if this is correct
+            {cout, OutALU} = {1'b0, A} + {1'b0, B_neg};
             if(cout !== OutALU[7]) Flags[0] = 1; //Overflow
             else Flags[0] = 0;
         end
@@ -752,7 +752,7 @@ module ControlUnit(
                 end
                 
 
-                if( LSL | LSR | MOV | AND | OR | NOT | ADD ) begin // all of these operations finish in T2 and are assigned SREG1 and DSTREG in the same way.
+                if( LSL | LSR | MOV | AND | OR | NOT | ADD | SUB ) begin // all of these operations finish in T2 and are assigned SREG1 and DSTREG in the same way.
 
                     if(LSL) temp_ALU_FunSel = 4'b1011; // LSL operation
                     else if(LSR) temp_ALU_FunSel = 4'b1100; // LSR operation
@@ -761,6 +761,7 @@ module ControlUnit(
                     else if (OR) temp_ALU_FunSel = 4'b1000; // OR operation
                     else if (NOT) temp_ALU_FunSel = 4'b0010; // NOT operation
                     else if (ADD) temp_ALU_FunSel = 4'b0100; // ADD operation 
+                    else if (SUB) temp_ALU_FunSel = 4'b0101; // SUB operation
 
 
                     if(~SREG1[2]) begin 
@@ -783,9 +784,48 @@ module ControlUnit(
 
                 end
 
-                else if (SUB) begin 
 
+                else if (INC | DEC) begin 
                     
+                    if(SREG1 == DSTREG) begin // Can be done in 1 clock cycle
+                        if(~SREG1[2]) begin 
+                            
+                            if(INC) temp_RF_FunSel = 2'b11; // Increment Operation on RF
+                            else if(DEC) temp_RF_FunSel = 2'b10; // Decrement Operation on RF
+
+                        end
+                        else if(SREG1[2]) begin 
+
+                            if(INC) temp_ARF_FunSel = 2'b11; // Increment Operation on RF
+                            else if(DEC) temp_ARF_FunSel = 2'b10; // Decrement Operation on RF
+
+                        end
+
+                        temp_SC_reset = 1'b1;
+                    end
+
+                    else begin  // if destination and source are different, we need to first load the data into the destination, then increment from there.
+
+                        temp_ALU_FunSel = 4'b0000; // ADD operation
+                        
+                        if(~SREG1[2]) begin 
+                            temp_MuxCSel = 1'b0; // Selecting RF_O1 as input to ALU
+                        end
+                        else if (SREG1[2]) begin 
+                            temp_MuxCSel = 1'b1; // Selecting ARF_OutA as input to ALU
+                        end
+                        
+                        if(~DSTREG[2]) begin 
+                            temp_RF_FunSel = 2'b01; // Writing ALU output to RF
+                            temp_MuxASel = 2'b00; // Selecting ALU output as input to RF
+                        end
+                        else if (DSTREG[2]) begin
+                            temp_ARF_FunSel = 2'b01; // Writing ALU output to ARF
+                            temp_MuxBSel = 2'b00; // Selecting ALU output as input to ARF
+                        end
+
+                        temp_SC_reset = 1'b0; // Counter reset is 0 because these instructions take 2 clock cycles
+                    end
 
                 end
                     
@@ -795,6 +835,19 @@ module ControlUnit(
 
         else if (T3) begin 
             
+            if(INC | DEC) begin 
+                if(~DSTREG[2]) begin 
+                    if(INC) temp_RF_FunSel = 2'b11; // Increment Operation on RF
+                    else if(DEC) temp_RF_FunSel = 2'b10; // Decrement Operation on RF
+                end
+                else if (DSTREG[2]) begin 
+                    if(INC) temp_ARF_FunSel = 2'b11; // Increment Operation on ARF
+                    else if(DEC) temp_ARF_FunSel = 2'b10; // Decrement Operation on ARF
+                end
+
+                temp_SC_reset = 1'b1; // Counter reset
+            end
+
         end
 
 
