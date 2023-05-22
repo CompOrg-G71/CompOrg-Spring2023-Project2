@@ -697,7 +697,7 @@ module ControlUnit(
 
             end
 
-            else if(MOV|AND|OR|NOT|ADD|SUB|LSR|LSL|INC|DEC|PSH) begin // all of these operations have a common execution sequence
+            else if(MOV|AND|OR|NOT|ADD|SUB|LSR|LSL|INC|DEC|PSH|PUL) begin // all of these operations have a common execution sequence
 
                 temp_Mem_CS = 1'b1; // Disabling memory
                 temp_IR_Enable = 1'b0; // no writing to IR
@@ -708,7 +708,7 @@ module ControlUnit(
 
                 // Determining the destination Register, since we disabled all register prior to this,
                 // it will result in only one register being enabled and written to
-                if(DSTREG[2]) begin
+                if(~DSTREG[2]) begin
                     case(DSTREG[1:0])
                         2'b00: temp_RF_RSel <= 4'b1000; // Enabling RF Register 1
                         2'b01: temp_RF_RSel <= 4'b0100; // Enabling RF Register 2
@@ -716,7 +716,7 @@ module ControlUnit(
                         2'b11: temp_RF_RSel <= 4'b0001; // Enabling RF Register 4
                     endcase
                 end
-                else if (~DSTREG[2]) begin 
+                else if (DSTREG[2]) begin 
                     case(DSTREG[1:0])
                         2'b00: temp_ARF_RSel <= 4'b0010; // Enabling SR Register
                         2'b01: temp_ARF_RSel <= 4'b0100; // Enabling AR Register
@@ -837,7 +837,6 @@ module ControlUnit(
 
                     temp_IR_Enable = 1'b0 // Disable IR
 
-                    temp_RF_RSel = 4'b0000 // Disabling all RF registers
                     temp_ARF_RSel = 4'b0000; // Disabling all ARF registers
 
                     temp_ARF_OutBSel = 2'b01; // Selecting SP as input to Memory Address
@@ -848,9 +847,8 @@ module ControlUnit(
                     temp_SC_reset = 1'b0; // Counter is not reset because this instruction takes 2 clock cycles
                 end
 
-                if(PUL & ~SREG1[2]) begin // INCREMENT SP
+                if(PUL & ~DSTREG[2]) begin // INCREMENT SP
 
-                    temp_RF_RSel = 4'b0000 // Disabling all RF registers
                     temp_ARF_RSel = 4'b0010; // Enabling SP register
 
                     temp_ARF_FunSel = 2'b11; // Increment Operation on ARF
@@ -867,6 +865,51 @@ module ControlUnit(
         end
 
         else if (T3) begin 
+
+            // Determining the destination Register, since we disabled all register prior to this,
+            // it will result in only one register being enabled and written to
+            if(~DSTREG[2]) begin
+                case(DSTREG[1:0])
+                    2'b00: temp_RF_RSel <= 4'b1000; // Enabling RF Register 1
+                    2'b01: temp_RF_RSel <= 4'b0100; // Enabling RF Register 2
+                    2'b10: temp_RF_RSel <= 4'b0010; // Enabling RF Register 3
+                    2'b11: temp_RF_RSel <= 4'b0001; // Enabling RF Register 4
+                endcase
+            end
+            else if (DSTREG[2]) begin 
+                case(DSTREG[1:0])
+                    2'b00: temp_ARF_RSel <= 4'b0010; // Enabling SR Register
+                    2'b01: temp_ARF_RSel <= 4'b0100; // Enabling AR Register
+                    2'b10: temp_ARF_RSel <= 4'b1000; // Enabling PC Register
+                    2'b11: temp_ARF_RSel <= 4'b1000; // Enabling PC Register
+                endcase
+            end
+
+            //Determining the Source Register, 
+            if(SREG1[2]) begin 
+                case(SREG1[1:0]) 
+                    2'b00: temp_ARF_OutASel <= 2'b01;
+                    2'b01: temp_ARF_OutASel <= 2'b00;
+                    2'b10: temp_ARF_OutASel <= 2'b11;
+                    2'b11: temp_ARF_OutASel <= 2'b11;
+                endcase
+            end
+            else if (~SREG1[2]) begin 
+                temp_RF_O1Sel = {1'b1, SREG1[1:0]};
+            end
+
+            // if(SREG2[2]) begin 
+            //     case(SREG2[1:0]) 
+            //         2'b00: temp_ARF_OutASel <= 2'b01;
+            //         2'b01: temp_ARF_OutASel <= 2'b00;
+            //         2'b10: temp_ARF_OutASel <= 2'b11;
+            //         2'b11: temp_ARF_OutASel <= 2'b11;
+            //     endcase
+            // end
+            // else 
+            if (~SREG2[2]) begin 
+                temp_RF_O1Sel = {1'b1, SREG1[1:0]};
+            end
             
             if(INC | DEC) begin 
                 if(~DSTREG[2]) begin 
@@ -883,7 +926,6 @@ module ControlUnit(
 
             if(PSH & ~SREG1[2]) begin // Decrement SP and Reset Counter
 
-                temp_RF_RSel = 4'b0000; // Disabling all RF registers
                 temp_ARF_RSel = 4'b0010; // Enabling SP Register in ARF
 
                 temp_ARF_FunSel = 2'b10; // Decrement Operation on ARF
@@ -891,24 +933,18 @@ module ControlUnit(
                 temp_SC_reset = 1'b1; // Counter reset
             end
 
-            if(PUL & ~SREG1[2]) begin // Store RF[SREG1] in M[SP]
+            if(PUL & ~DSTREG[2]) begin // Load M[SP] to Rx
 
-                temp_ALU_FunSel = 4'b0000; // PASS A to OutALU
+                temp_ARF_OutBSel = 4'b0010; // Selecting SP as input to Memory Address
 
-                temp_MuxCSel = 1'b0; // Selecting RF_O1 as input to ALU
-
-                temp_IR_Enable = 1'b0 // Disable IR
-
-                temp_RF_RSel = 4'b0000 // Disabling all RF registers
-                temp_ARF_RSel = 4'b0000; // Disabling all ARF registers
-
-                temp_ARF_OutBSel = 2'b01; // Selecting SP as input to Memory Address
-
-                temp_Mem_WR = 1'b1; // Write to memory
                 temp_Mem_CS = 1'b0; // Enable memory
+                temp_Mem_WR = 1'b0; // Read from memory
+
+                temp_MuxASel = 1'b1; // Selecting Memory Output as input to ALU
+
+                temp_RF_FunSel = 2'b01; // Load Operation on RF
 
                 temp_SC_reset = 1'b1; // Counter reset
-
             end
 
         end
