@@ -233,7 +233,7 @@ module part3_ALU (input clk, input [7:0] A, input [7:0] B, input [3:0] FunSel, o
             else Flags[0] = 0;
         end
         else if(FunSel == 4'b0101)begin
-            {cout, OutALU} = {1'b0, A} + {1'b0, B_neg}; // TODO: check if this is correct
+            {cout, OutALU} = {1'b0, A} + {1'b0, B_neg};
             if(cout !== OutALU[7]) Flags[0] = 1; //Overflow
             else Flags[0] = 0;
         end
@@ -396,372 +396,1259 @@ input      Clock
 
 endmodule
 
-module SeqCounter(clk,Reset,T);
-    input clk;
-    input Reset;
-    output [2:0] T;
+
+module ControlUnit(input Clock);
+
+//Input Registers of ALUSystem
+    reg[1:0] RF_O1Sel; 
+    reg[1:0] RF_O2Sel; 
+    reg[1:0] RF_FunSel;
+    reg[3:0] RF_RSel;
+    reg[3:0] RF_TSel;
+    reg[3:0] ALU_FunSel;
+    reg[1:0] ARF_OutASel; 
+    reg[1:0] ARF_OutBSel; 
+    reg[1:0] ARF_FunSel;
+    reg[2:0] ARF_RSel;
+    reg      IR_LH;
+    reg      IR_Enable;
+    reg[1:0] IR_Funsel;
+    reg      Mem_WR;
+    reg      Mem_CS;
+    reg[1:0] MuxASel;
+    reg[1:0] MuxBSel;
+    reg      MuxCSel;
+    reg RST;
+         
+    ALUSystem ALU1(RF_O1Sel, 
+         RF_O2Sel,
+         RF_FunSel,
+         RF_RSel,
+         RF_TSel,
+         ALU_FunSel,
+         ARF_OutASel, 
+         ARF_OutBSel, 
+         ARF_FunSel,
+         ARF_RSel,
+         IR_LH,
+         IR_Enable,
+         IR_Funsel,
+         Mem_WR,
+         Mem_CS,
+         MuxASel,
+         MuxBSel,
+         MuxCSel,
+         Clock);
+          
+reg [1:0] REGSEL;
+reg [3:0] OPCODE;
+reg [3:0] CHECK;
+reg ADDRESSINGMODE;
+reg [3:0] SRCREG1;
+reg [3:0] SRCREG2;
+reg [3:0] DESTREG;
+reg OPCODELOADED;
+
+
+reg [3:0] T;
+
+initial 
+begin
+OPCODELOADED = 0;
+CHECK = 4'b1111;
+RST = 1;
+T= 4'b0000;
+end
+
+/*
+T = 0 ==> LOAD LSB
+T = 1 ==> LOAD MSB
+T= 2,3,4... ==> OPERATIONS
+*/
+
+always @(posedge Clock)
+begin
+$display ("----");
+if (CHECK == 4'b0000 || CHECK == 4'b1111) T = 4'b0000;
+else T = T+1;
+end
+
+always @(negedge Clock)
+begin
+
+if (CHECK == 4'b1111) //
+begin
+$display("SIFIRLA");
+ARF_RSel= 3'b000;
+ARF_FunSel= 2'b11;
+ARF_OutBSel= 2'b00;
+
+RF_RSel= 4'b0000;
+RF_FunSel= 2'b11;
+MuxASel= 2'b00;
+MuxBSel= 2'b00;
+MuxCSel= 1'b0;
+Mem_CS = 1;
+IR_Enable = 1;
+IR_Funsel = 2'b11;
+CHECK = 4'b0000;
+RST = 0;
+end
+
+else if (CHECK == 4'b0000 && RST) CHECK = 4'b1111;
+
+else if (CHECK == 4'b0000 && RST == 0) // LSB LOAD TO IR
+begin
+RST = 0;
+$display("LSB YÜKLE");
+Mem_CS = 0;
+Mem_WR = 0;
+ARF_FunSel = 2'b01;
+ARF_RSel = 3'b011;
+ARF_OutBSel = 2'b00;
+RF_RSel= 4'b1111;
+IR_Enable = 1;
+IR_LH = 1;
+IR_Funsel = 2'b10;
+CHECK = 4'b0001;
+end
+
+else if (CHECK == 4'b0001) // MSB LOAD TO IR
+    begin //1
+    $display("MSB YÜKLE");
+    $display("IR OUT: %h",ALU1.IROut);
+    RF_RSel= 4'b1111;
+    ARF_FunSel = 2'b01;
+    ARF_RSel = 3'b011;
+    ARF_OutBSel = 2'b00;
+    IR_Enable = 1;
+    IR_LH = 0;
+    IR_Funsel = 2'b10;
+    CHECK = 4'b1110;
+    end//1
+
+else if(CHECK == 4'b1110)
+begin//13
+$display("OPCODE AL");
+IR_Enable =1'b0;
+OPCODE = ALU1.IROut [15:12];
+OPCODELOADED = 1;
+ADDRESSINGMODE = ALU1.IROut [10];
+$display("IR OUT: %h",ALU1.IROut);
+if ((OPCODE == 4'b1001|| OPCODE == 4'b1010 || OPCODE == 4'b1100 || OPCODE== 4'b1101) && OPCODELOADED == 1'b1) 
+begin //2
+$display("N/A OLMAYAN");
+    if (ALU1.IROut [10] == 0 && OPCODE != 4'b1101 ) // If addressing mode is direct and the operation is not ST.
+        begin
+        CHECK = 4'b0010;
+        end
     
-    reg [2:0] counter = 3'd7; //Start counter from T7. Because at the beginning we will reset all registers
+    else// If addressing mode is immediate.
+        begin
+        CHECK = 4'b0011;
+        end
+end
+
+end//2   
+
+if ((OPCODE == 4'b1001|| OPCODE == 4'b1010 || OPCODE == 4'b1100 || OPCODE== 4'b1101) && OPCODELOADED == 1)
+    begin //3
     
-    always@(posedge clk)begin
-            counter = counter + 3'd1;
-            if(Reset == 1'b1)begin //Reset counter to T0
-                counter = 3'd0;
-            end
-    end
-    assign T = counter;
-endmodule
-
-module Dec_8_1(
-    input [2:0] s,
-    output S0,
-    output S1,
-    output S2,
-    output S3,
-    output S4,
-    output S5,
-    output S6,
-    output S7
-    );
-    assign S0=(~s[0]&~s[1]&~s[2]),
-    S1=(~s[2]&~s[1]&s[0]),
-    S2=(~s[2]&s[1]&~s[0]),
-    S3=(~s[2]&s[1]&s[0]),
-    S4=(s[2]&~s[1]&~s[0]),
-    S5=(s[2]&~s[1]&s[0]),
-    S6=(s[2]&s[1]&~s[0]),
-    S7=(s[2]&s[1]&s[0]);
-endmodule
-
-module Dec_16_1(
-    input [3:0] s,
-    output S0,
-    output S1,
-    output S2,
-    output S3,
-    output S4,
-    output S5,
-    output S6,
-    output S7,
-    output S8,
-    output S9,
-    output S10,
-    output S11,
-    output S12,
-    output S13,
-    output S14,
-    output S15
-    );
-    assign S0=(~s[3]&~s[2]&~s[1]&~s[0]),
-    S1=(~s[3]&~s[2]&~s[1]&s[0]),
-    S2=(~s[3]&~s[2]&s[1]&~s[0]),
-    S3=(~s[3]&~s[2]&s[1]&s[0]),
-    S4=(~s[3]&s[2]&~s[1]&~s[0]),
-    S5=(~s[3]&s[2]&~s[1]&s[0]),
-    S6=(~s[3]&s[2]&s[1]&~s[0]),
-    S7=(~s[3]&s[2]&s[1]&s[0]),
-    S8=(s[3]&~s[2]&~s[1]&~s[0]),
-    S9=(s[3]&~s[2]&~s[1]&s[0]),
-    S10=(s[3]&~s[2]&s[1]&~s[0]),
-    S11=(s[3]&~s[2]&s[1]&s[0]),
-    S12=(s[3]&s[2]&~s[1]&~s[0]),
-    S13=(s[3]&s[2]&~s[1]&s[0]),
-    S14=(s[3]&s[2]&s[1]&~s[0]),
-    S15=(s[3]&s[2]&s[1]&s[0]);
-endmodule
-
-
-
-module ControlUnit(
-    input T0, T1, T2, T3, T4, T5, T6, T7,
-    input AND,
-    input OR,
-    input NOT,
-    input ADD,
-    input SUB,
-    input LSR,
-    input LSL,
-    input INC,
-    input DEC,
-    input BRA,
-    input BNE,
-    input MOV,
-    input LD,
-    input ST,
-    input PUL,
-    input PSH,
-
-    input [1:0] RSEL,
-    input [3:0] DSTREG,
-    input [3:0] SREG1,
-    input [3:0] SREG2,
-    input AddressMode,
-
-    input Z_Flag, C_Flag, N_Flag, O_Flag,
-
-    output wire SeqCounter_Reset,
-
-    output wire [2:0] RF_O1Sel, 
-    output wire [2:0] RF_O2Sel, 
-    output wire [1:0] RF_FunSel,
-    output wire [3:0] RF_RSel,
-    output wire [3:0] RF_TSel,
-    output wire [3:0] ALU_FunSel,
-    output wire [1:0] ARF_OutASel, 
-    output wire [1:0] ARF_OutBSel,
-    output wire [1:0] ARF_FunSel,
-    output wire [3:0] ARF_RSel,
-    output wire       IR_LH,
-    output wire       IR_Enable,
-    output wire [1:0] IR_FunSel,
-    output wire       Mem_WR,
-    output wire       Mem_CS,
-    output wire [1:0] MuxASel,
-    output wire [1:0] MuxBSel,
-    output wire       MuxCSel
-);
-
-    // Register File
-    reg [2:0] temp_RF_O1Sel;
-    reg [2:0] temp_RF_O2Sel;
-    reg [1:0] temp_RF_FunSel;
-    reg [3:0] temp_RF_RSel;
-    reg [3:0] temp_RF_TSel;
-
-    // ALU
-    reg [3:0] temp_ALU_FunSel;
-
-    // Address Register File
-    reg [1:0] temp_ARF_OutASel;
-    reg [1:0] temp_ARF_OutBSel;
-    reg [1:0] temp_ARF_FunSel;
-    reg [3:0] temp_ARF_RSel;
-
-    // Instruction Register
-    reg       temp_IR_LH;
-    reg       temp_IR_Enable;
-    reg [1:0] temp_IR_FunSel;
-
-    // Memory
-    reg       temp_Mem_WR;
-    reg       temp_Mem_CS;
-
-    // Multiplexers
-    reg [1:0] temp_MuxASel;
-    reg [1:0] temp_MuxBSel;
-    reg       temp_MuxCSel;
-
-    reg temp_SeqCounter_Reset = 1'b0;
-
-    always @* begin
-        temp_RF_O1Sel = 3'b0; // Default value
-        temp_RF_O2Sel = 3'b0; // Default value
-        temp_RF_FunSel = 2'b00; // Default value
-        temp_RF_RSel = 4'b0000; // Default value
-        temp_RF_TSel = 4'b0000; // Default value
-        temp_ALU_FunSel = 4'b0000; // Default value
-        temp_ARF_OutASel = 2'b00; // Default value
-        temp_ARF_OutBSel = 2'b00; // Default value
-        temp_ARF_FunSel = 2'b00; // Default value
-        temp_ARF_RSel = 4'b0000; // Default value
-        temp_IR_LH = 1'b0; // Default value
-        temp_IR_Enable = 1'b0; // Default value
-        temp_IR_FunSel = 2'b00; // Default value
-        temp_Mem_WR = 1'b0; // Default value
-        temp_Mem_CS = 1'b0; // Default value
-        temp_MuxASel = 2'b00; // Default value
-        temp_MuxBSel = 2'b00; // Default value
-        temp_MuxCSel = 1'b0; // Default value
-        temp_SeqCounter_Reset = 1'b0; // Default value
-
-        if (T7) begin
-            temp_IR_Enable = 1'b1;
-            temp_IR_FunSel = 2'b00;
-            temp_RF_RSel = 4'b1111;
-            temp_RF_TSel = 4'b1111;
-            temp_RF_FunSel = 2'b00;
-            temp_ARF_RSel = 4'b1111;
-            temp_ARF_FunSel = 2'b00;
-            temp_Mem_CS = 1'b1;
+    $display("immediate");
+    IR_Enable =1'b0;// TO PREVENT IR CHANGE, IR IS DISABLED.
+    case (OPCODE)
+        4'b1001:
+        begin
+        
+        $display("OPCODE 0");
+        MuxBSel = 2'b01;
+        ARF_FunSel = 2'b10;
+        ARF_RSel = 3'b011;
+        RF_RSel = 4'b1111;
+        Mem_WR = 1'b0;
+        CHECK = 4'b0000;
+        OPCODELOADED = 0;
         end
-        else if (T0) begin
-            temp_SeqCounter_Reset = 1'b0;
-            temp_IR_LH = 1'b0;
-            temp_IR_Enable = 1'b1;
-            temp_IR_FunSel = 2'b01;
-            temp_RF_RSel = 4'b0000;
-            temp_RF_TSel = 4'b0000;
-            temp_ARF_RSel = 4'b1000; // Selecting PC
-            temp_ARF_FunSel = 2'b11; // Incrementing PC
-            temp_Mem_CS = 1'b0;
-            temp_Mem_WR = 1'b0;
+        
+        4'b1010: // OPCODE 1 LOAD
+        begin
+        
+        if (CHECK == 4'b0010) //direct to immediate
+            begin
+            $display("direct to immediate: LSB TO AR");
+            ARF_RSel = 3'b111;
+            ARF_OutBSel = 2'b10;
+            IR_LH  =1'b1;
+            IR_Enable =1'b1;
+            IR_Funsel = 2'b10;
+            RF_RSel = 4'b1111;
+            CHECK = 4'b0011;
+            end
+            
+        else if (CHECK == 4'b0011)
+            begin
+                $display("OPCODE 1");
+                ARF_RSel =  3'b111; 
+        
+                MuxASel = 2'b00;
+                RF_FunSel = 2'b10;
+                RF_O1Sel = ALU1.IROut [9:8];
+                
+                case(ALU1.IROut [9:8])
+                  2'b00: RF_RSel = 4'b0111;
+                  2'b01: RF_RSel = 4'b1011;
+                  2'b10: RF_RSel = 4'b1101;
+                  2'b11: RF_RSel = 4'b1110;
+                endcase 
+                
+                OPCODELOADED = 0;    
+                CHECK = 4'b0000; 
+            end
+        
         end
-        else if (T1) begin
-            temp_SeqCounter_Reset = 1'b0;
-            temp_IR_LH = 1'b1;
-            temp_IR_Enable = 1'b1;
-            temp_IR_FunSel = 2'b01;
-            temp_RF_RSel = 4'b0000;
-            temp_RF_TSel = 4'b0000;
-            temp_ARF_RSel = 4'b1000; // Selecting PC
-            temp_ARF_FunSel = 2'b11; // Incrementing PC
-            temp_Mem_CS = 1'b0;
-            temp_Mem_WR = 1'b0;
+        
+        4'b1100:
+        begin
+        
+        $display("OPCODE 2");
+        if (CHECK == 4'b0011)
+        
+            begin 
+            $display ("0011'e girdi.");
+            Mem_WR = 1'b0;
+            ARF_RSel = 3'b101;
+            ARF_FunSel = 2'b10;
+            MuxBSel = 2'b01;
+            RF_RSel = 4'b1111;
+            Mem_CS = 0;
+            RF_O2Sel = ALU1.IROut [9:8];
+            ALU_FunSel = 4'b0001;
+            CHECK = 4'b0100;
+            end
+        
+        else if (CHECK == 4'b0100)
+            begin
+            RF_RSel = 4'b1111;
+            Mem_WR = 1'b1;
+            ARF_RSel = 3'b111;
+            ARF_OutBSel = 2'b10;
+            RF_RSel = 3'b111;
+            RF_O2Sel = ALU1.IROut [9:8];
+            ALU_FunSel = 4'b0001;
+            OPCODELOADED = 0;
+            CHECK = 4'b0000; 
+            end 
         end
-        else if (T2) begin
-            if (BRA & AddressMode) begin
-                temp_SeqCounter_Reset = 1'b1;
-                temp_RF_RSel = 4'b0000;
-                temp_ARF_RSel = 4'b0000;
-                temp_IR_Enable = 1'b0;
-                temp_Mem_CS = 1'b1;
-            end
-            else if (BNE & AddressMode) begin
-                temp_SeqCounter_Reset = 1'b1;
-                temp_RF_RSel = 4'b0000;
-                temp_ARF_RSel = 4'b0000;
-                temp_IR_Enable = 1'b0;
-                temp_Mem_CS = 1'b1;
-            end
-            else if (ST & ~AddressMode) begin
-                temp_SeqCounter_Reset = 1'b1;
-                temp_RF_RSel = 4'b0000;
-                temp_ARF_RSel = 4'b0100; // Selecting AR Register
-                temp_IR_Enable = 1'b0;
-                temp_Mem_CS = 1'b0;
-            end
-            else if (BNE & Z_Flag) begin
-                temp_SeqCounter_Reset = 1'b1;
-                temp_RF_RSel = 4'b0000;
-                temp_ARF_RSel = 4'b0000;
-                temp_IR_Enable = 1'b0;
-                temp_Mem_CS = 1'b1;
-            end
-            else if (~AddressMode & (BRA | (BNE & ~Z_Flag))) begin
-                temp_MuxBSel = 2'b10; // Selecting IR(7-0) as input to MuxB
-                temp_ARF_RSel = 4'b0100; // Selecting AR Register
-                temp_ARF_FunSel = 2'b01; // Incrementing AR Register
-                temp_SeqCounter_Reset = 1'b1;
-                temp_IR_Enable = 1'b0;
-                temp_RF_RSel = 4'b0000;
-                temp_Mem_CS = 1'b1;
-            end
-            else if (LD & AddressMode) begin
-                temp_IR_Enable = 1'b0;
-                temp_ARF_RSel = 4'b0000; // Disabling all register in ARF
-                temp_ARF_OutBSel = 2'b00; // Selecting the AR Register as output to memory address
-                temp_Mem_WR = 1'b0; // Reading from memory
-                temp_Mem_CS = 1'b0; // Enabling memory
-                temp_MuxASel = 2'b01; // Selecting Data from memory to input into RF
-                temp_RF_FunSel = 2'b01; // Writing to RF
-                temp_SeqCounter_Reset = 1'b1;
-                case (RSEL)
-                    2'b00: temp_RF_RSel = 4'b1000; // Enabling RF Register 1
-                    2'b01: temp_RF_RSel = 4'b0100; // Enabling RF Register 2
-                    2'b10: temp_RF_RSel = 4'b0010; // Enabling RF Register 3
-                    2'b11: temp_RF_RSel = 4'b0001; // Enabling RF Register 4
+        
+        4'b1101:
+        begin
+        
+        
+        RF_RSel = 4'b1111;//
+        Mem_WR = 1'b0;//       
+        $display ("Z FLAG: %d",ALU1.ALUOutFlag[3]);
+        if (ALU1.ALUOutFlag[3]== 1'b0)
+        begin
+            MuxBSel = 2'b01;
+            ARF_FunSel = 2'b10;
+            ARF_RSel = 3'b011;
+        end
+        else ARF_RSel = 3'b111;
+        OPCODELOADED = 0;
+        CHECK = 4'b0000; 
+        end 
+        endcase
+    end//3
+
+if((OPCODE != 4'b1001 && OPCODE != 4'b1010 && OPCODE != 4'b1100 && OPCODE != 4'b1101) && OPCODELOADED == 1)
+    begin //4 n/a bloku
+    
+    $display("N/A BLOKU");
+    $display("IR OUT: %h",ALU1.IROut);
+    IR_Enable =1'b0;// TO PREVENT IR CHANGE, IR IS DISABLED.
+    SRCREG2 = ALU1.IROut[3:0];
+    SRCREG1 = ALU1.IROut[7:4];
+    DESTREG = ALU1.IROut[11:8];
+    
+        case (OPCODE)
+        4'b1011: // OPCODE 12 C
+        begin
+        $display("OPCODE 3");
+          Mem_WR = 1'b0;
+          
+          if(SRCREG1[2] == 1 && DESTREG[2] == 1) begin // RF TO RF
+              RF_O2Sel = SRCREG1[1:0];
+              ALU_FunSel = 4'b0001;
+              MuxASel = 2'b11;
+              RF_FunSel = 2'b10;
+              ARF_RSel = 3'b111;
+              
+              case(DESTREG[1:0])
+              2'b00: RF_RSel = 4'b0111;
+              2'b01: RF_RSel = 4'b1011;
+              2'b10: RF_RSel = 4'b1101;
+              2'b11: RF_RSel = 4'b1110;
+              endcase 
+          end
+          
+          else if(SRCREG1[2] == 1 && DESTREG[2] == 0) begin // RF TO ARF
+              RF_O2Sel = SRCREG1[1:0];
+              ALU_FunSel = 4'b0001;
+              MuxBSel = 2'b11;
+              ARF_FunSel = 2'b10;
+              RF_RSel = 4'b1111;
+              
+              case(DESTREG[1:0])
+              2'b00: ARF_RSel = 3'b011;
+              2'b01: ARF_RSel = 3'b011;
+              2'b10: ARF_RSel = 3'b101;
+              2'b11: ARF_RSel = 3'b110;
+              endcase
+          end
+          
+          else if(SRCREG1[2] == 0 && DESTREG[2] == 1) begin // ARF TO RF
+               ARF_OutASel = SRCREG1[1:0]; 
+               MuxCSel = 1'b0;
+               ALU_FunSel = 4'b0000;
+               MuxASel = 2'b11;
+               RF_FunSel = 2'b10;
+               ARF_RSel = 3'b111;
+               
+               case(DESTREG[1:0])
+               2'b00: RF_RSel = 4'b0111;
+               2'b01: RF_RSel = 4'b1011;
+               2'b10: RF_RSel = 4'b1101;
+               2'b11: RF_RSel = 4'b1110;
+               endcase  
+          end
+            
+          else if(SRCREG1[2] == 0 && DESTREG[2] == 0) begin // ARF TO ARF
+               ARF_OutASel = SRCREG1[1:0]; 
+               MuxCSel = 1'b0;
+               ALU_FunSel = 4'b0000;
+               MuxBSel = 2'b11;
+               RF_RSel = 4'b1111;
+               ARF_FunSel = 2'b10;
+               
+               case(DESTREG[1:0])
+               2'b00: ARF_RSel = 3'b011;
+               2'b01: ARF_RSel = 3'b011;
+               2'b10: ARF_RSel = 3'b101;
+               2'b11: ARF_RSel = 3'b110;
+               endcase   
+          end  
+          OPCODELOADED = 0;
+          CHECK = 4'b0000;
+        end
+        
+        4'b0000: // OPCODE 0
+        begin
+        
+        Mem_WR = 1'b0;
+        
+            if(SRCREG1[2] == 1 && SRCREG2[2] == 1 && DESTREG[2] == 1) begin // RF AND RF -> RF
+                RF_O1Sel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b1;
+                ALU_FunSel = 4'b0111;
+                MuxASel = 2'b11;
+                RF_FunSel = 2'b10;
+                ARF_RSel = 3'b111;
+                
+                case(DESTREG[1:0])
+                2'b00: RF_RSel = 4'b0111;
+                2'b01: RF_RSel = 4'b1011;
+                2'b10: RF_RSel = 4'b1101;
+                2'b11: RF_RSel = 4'b1110;
                 endcase
             end
-            else if (LD & ~AddressMode) begin
-                temp_Mem_CS = 1'b1; // Disabling memory
-                temp_ARF_RSel = 4'b0000; // Disabling all register in ARF
-                temp_MuxASel = 2'b10; // Selecting IR(7-0) as input to RF
-                temp_IR_Enable = 1'b0; // no writing to IR
-                temp_RF_FunSel = 2'b01; // Writing to RF
-                temp_SeqCounter_Reset = 1'b1;
-                case (RSEL)
-                    2'b00: temp_RF_RSel = 4'b1000; // Enabling RF Register 1
-                    2'b01: temp_RF_RSel = 4'b0100; // Enabling RF Register 2
-                    2'b10: temp_RF_RSel = 4'b0010; // Enabling RF Register 3
-                    2'b11: temp_RF_RSel = 4'b0001; // Enabling RF Register 4
-                endcase
+            
+            else if(SRCREG1[2] == 1 && SRCREG2[2] == 1 && DESTREG[2] == 0) begin // RF AND RF -> ARF
+                RF_O1Sel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b1;
+                ALU_FunSel = 4'b0111;
+                MuxBSel = 2'b11;
+                RF_RSel = 4'b1111;
+                ARF_FunSel = 2'b10;
+                
+                case(DESTREG[1:0])
+                2'b00: ARF_RSel = 3'b011;
+                2'b01: ARF_RSel = 3'b011;
+                2'b10: ARF_RSel = 3'b101;
+                2'b11: ARF_RSel = 3'b110;
+                endcase  
             end
-            else if (ST & AddressMode) begin
-                temp_IR_Enable = 1'b0; // no writing to IR
-                temp_RF_O2Sel = {1'b1, DSTREG}; // Selecting the RF Register to write to memory based on DSTREG
-                temp_RF_RSel = 4'b0000; // Disabling RF
-                temp_ALU_FunSel = 4'b0001; // OutALU is O2Sel into memory data input
-                temp_ARF_OutBSel = 2'b00; // Selecting the AR Register as output to memory address input
-                temp_ARF_RSel = 4'b0000; // Disabling all register in ARF
-                temp_Mem_WR = 1'b1; // Writing to memory
-                temp_Mem_CS = 1'b0; // Enabling memory
-                temp_SeqCounter_Reset = 1'b1;
+            
+            else if(SRCREG1[2] == 0 && SRCREG2[2] == 1 && DESTREG[2] == 1) begin // ARF AND RF ->  RF
+                ARF_OutASel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b0;
+                ALU_FunSel = 4'b0111;
+                MuxASel = 2'b11;
+                ARF_RSel = 3'b111;
+                RF_FunSel = 2'b10;
+                
+                case(DESTREG[1:0])
+                2'b00: RF_RSel = 4'b0111;
+                2'b01: RF_RSel = 4'b1011;
+                2'b10: RF_RSel = 4'b1101;
+                2'b11: RF_RSel = 4'b1110;
+                endcase    
             end
-            else if (MOV | AND | OR | NOT | ADD | SUB | LSR | LSL | INC | DEC) begin
-                temp_Mem_CS = 1'b1; // Disabling memory
-                temp_IR_Enable = 1'b0; // no writing to IR
-                temp_RF_RSel = 4'b0000; // Disabling all Registers in RF
-                temp_ARF_RSel = 4'b0000; // Disabling all Registers in ARF
-                if (DSTREG[3] == 1'b1) begin
-                    case (DSTREG[2:0])
-                        3'b000: temp_RF_RSel = 4'b1000; // Enabling RF Register 1
-                        3'b001: temp_RF_RSel = 4'b0100; // Enabling RF Register 2
-                        3'b010: temp_RF_RSel = 4'b0010; // Enabling RF Register 3
-                        3'b011: temp_RF_RSel = 4'b0001; // Enabling RF Register 4
-                    endcase
-                end
-                else if (DSTREG[3] == 1'b0) begin
-                    case (DSTREG[2:0])
-                        3'b000: temp_ARF_RSel = 4'b0010; // Enabling SR Register
-                        3'b001: temp_ARF_RSel = 4'b0100; // Enabling AR Register
-                        3'b010, 3'b011: temp_ARF_RSel = 4'b1000; // Enabling PC Register
-                    endcase
-                end
-                if (SREG1[3] == 1'b1) begin
-                    case (SREG1[2:0])
-                        3'b000: temp_ARF_OutASel = 2'b01; // Selecting SR Register as output to ALU
-                        3'b001: temp_ARF_OutASel = 2'b00; // Selecting AR Register as output to ALU
-                        3'b010, 3'b011: temp_ARF_OutASel = 2'b11; // Selecting PC Register as output to ALU
-                    endcase
-                end
-                else if (SREG1[3] == 1'b0) begin
-                    temp_RF_O1Sel = {1'b1, SREG1[2:0]}; // Selecting the RF Register as input to ALU
-                end
-                if (SREG2[3] == 1'b1) begin
-                    case (SREG2[2:0])
-                        3'b000: temp_ARF_OutBSel = 2'b01; // Selecting SR Register as output to ALU
-                        3'b001: temp_ARF_OutBSel = 2'b00; // Selecting AR Register as output to ALU
-                        3'b010, 3'b011: temp_ARF_OutBSel = 2'b11; // Selecting PC Register as output to ALU
-                    endcase
-                end
-                else if (SREG2[3] == 1'b0) begin
-                    temp_RF_O2Sel = {1'b1, SREG2[2:0]}; // Selecting the RF Register as input to ALU
-                end
-                case ({AND, OR, NOT, ADD, SUB, LSR, LSL, INC, DEC})
-                    9'b000_00_000: temp_ALU_FunSel = 4'b0000; // AND
-                    9'b000_00_001: temp_ALU_FunSel = 4'b0001; // OR
-                    9'b000_00_010: temp_ALU_FunSel = 4'b0010; // NOT
-                    9'b000_00_011: temp_ALU_FunSel = 4'b0011; // ADD
-                    9'b000_00_100: temp_ALU_FunSel = 4'b0100; // SUB
-                    9'b000_00_101: temp_ALU_FunSel = 4'b0101; // LSR
-                    9'b000_00_110: temp_ALU_FunSel = 4'b0110; // LSL
-                    9'b000_00_111: temp_ALU_FunSel = 4'b0111; // INC
-                    9'b000_01_000: temp_ALU_FunSel = 4'b1000; // DEC
-                    default: temp_ALU_FunSel = 4'b0000; // Default to AND operation
-                endcase
+            
+            else if(SRCREG1[2] == 0 && SRCREG2[2] == 1 && DESTREG[2] == 0) begin // ARF AND RF -> ARF
+                ARF_OutASel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b0;
+                ALU_FunSel = 4'b0111;
+                MuxBSel = 2'b11;
+                RF_RSel = 4'b1111;
+                ARF_FunSel = 2'b10;
+                
+                case(DESTREG[1:0])
+                2'b00: ARF_RSel = 3'b011;
+                2'b01: ARF_RSel = 3'b011;
+                2'b10: ARF_RSel = 3'b101;
+                2'b11: ARF_RSel = 3'b110;
+                endcase   
             end
+            OPCODELOADED = 0;
+            CHECK = 4'b0000;
         end
+        
+        4'b0001: // OPCODE 1
+        begin
+        Mem_WR = 1'b0;
+       
+    
+            if(SRCREG1[2] == 1 && SRCREG2[2] == 1 && DESTREG[2] == 1) begin // RF AND RF -> RF
+                RF_O1Sel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b1;
+                ALU_FunSel = 4'b1000;
+                MuxASel = 2'b11;
+                RF_FunSel = 2'b10;
+                ARF_RSel = 3'b111;
+                
+                case(DESTREG[1:0])
+                2'b00: RF_RSel = 4'b0111;
+                2'b01: RF_RSel = 4'b1011;
+                2'b10: RF_RSel = 4'b1101;
+                2'b11: RF_RSel = 4'b1110;
+                endcase
+            end
+            
+            else if(SRCREG1[2] == 1 && SRCREG2[2] == 1 && DESTREG[2] == 0) begin // RF AND RF -> ARF
+                RF_O1Sel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b1;
+                ALU_FunSel = 4'b1000;
+                MuxBSel = 2'b11;
+                RF_RSel = 4'b1111;
+                ARF_FunSel = 2'b10;
+                
+                case(DESTREG[1:0])
+                2'b00: ARF_RSel = 3'b011;
+                2'b01: ARF_RSel = 3'b011;
+                2'b10: ARF_RSel = 3'b101;
+                2'b11: ARF_RSel = 3'b110;
+                endcase  
+            end
+            
+            else if(SRCREG1[2] == 0 && SRCREG2[2] == 1 && DESTREG[2] == 1) begin // ARF AND RF ->  RF
+                ARF_OutASel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b0;
+                ALU_FunSel = 4'b1000;
+                MuxASel = 2'b11;
+                ARF_RSel = 3'b111;
+                RF_FunSel = 2'b10;
+                
+                case(DESTREG[1:0])
+                2'b00: RF_RSel = 4'b0111;
+                2'b01: RF_RSel = 4'b1011;
+                2'b10: RF_RSel = 4'b1101;
+                2'b11: RF_RSel = 4'b1110;
+                endcase    
+            end
+            
+            else if(SRCREG1[2] == 0 && SRCREG2[2] == 1 && DESTREG[2] == 0) begin // ARF AND RF -> ARF
+                ARF_OutASel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b0;
+                ALU_FunSel = 4'b1000;
+                MuxBSel = 2'b11;
+                RF_RSel = 4'b1111;
+                ARF_FunSel = 2'b10;
+                
+                case(DESTREG[1:0])
+                2'b00: ARF_RSel = 3'b011;
+                2'b01: ARF_RSel = 3'b011;
+                2'b10: ARF_RSel = 3'b101;
+                2'b11: ARF_RSel = 3'b110;
+                endcase   
+            end
+            OPCODELOADED = 0;
+            CHECK = 4'b0000;
+        end // END OF OPCODE 5
+        
+        4'b0010: // OPCODE 2
+        begin
+          Mem_WR = 1'b0;
+           
+          if(SRCREG1[2] == 1 && DESTREG[2] == 1) begin // RF TO RF
+              RF_O2Sel = SRCREG1[1:0];
+              ALU_FunSel = 4'b0011;
+              MuxASel = 2'b11;
+              RF_FunSel = 2'b10;
+              ARF_RSel = 3'b111;
+              
+              case(DESTREG[1:0])
+              2'b00: RF_RSel = 4'b0111;
+              2'b01: RF_RSel = 4'b1011;
+              2'b10: RF_RSel = 4'b1101;
+              2'b11: RF_RSel = 4'b1110;
+              endcase 
+          end
+          
+          else if(SRCREG1[2] == 1 && DESTREG[2] == 0) begin // RF TO ARF
+              RF_O2Sel = SRCREG1[1:0];
+              ALU_FunSel = 4'b0011;
+              MuxBSel = 2'b11;
+              ARF_FunSel = 2'b10;
+              RF_RSel = 4'b1111;
+              
+              case(DESTREG[1:0])
+              2'b00: ARF_RSel = 3'b011;
+              2'b01: ARF_RSel = 3'b011;
+              2'b10: ARF_RSel = 3'b101;
+              2'b11: ARF_RSel = 3'b110;
+              endcase
+          end
+          
+          else if(SRCREG1[2] == 0 && DESTREG[2] == 1) begin // ARF TO RF
+               ARF_OutASel = SRCREG1[1:0]; 
+               MuxCSel = 1'b0;
+               ALU_FunSel = 4'b0010;
+               MuxASel = 2'b11;
+               RF_FunSel = 2'b10;
+               ARF_RSel = 3'b111;
+               
+               case(DESTREG[1:0])
+               2'b00: RF_RSel = 4'b0111;
+               2'b01: RF_RSel = 4'b1011;
+               2'b10: RF_RSel = 4'b1101;
+               2'b11: RF_RSel = 4'b1110;
+               endcase  
+          end
+            
+          else if(SRCREG1[2] == 0 && DESTREG[2] == 0) begin // ARF TO ARF
+               ARF_OutASel = SRCREG1[1:0]; 
+               MuxCSel = 1'b0;
+               ALU_FunSel = 4'b0010;
+               MuxBSel = 2'b11;
+               RF_RSel = 4'b1111;
+               ARF_FunSel = 2'b10;
+               
+               case(DESTREG[1:0])
+               2'b00: ARF_RSel = 3'b011;
+               2'b01: ARF_RSel = 3'b011;
+               2'b10: ARF_RSel = 3'b101;
+               2'b11: ARF_RSel = 3'b110;
+               endcase   
+          end  
+          OPCODELOADED = 0;
+          CHECK = 4'b0000;
+        end // END OF OPCODE 6
+        
+        4'b0101: // OPCODE 5
+        begin
+        
+          Mem_WR = 1'b0;
+           
+          if(SRCREG1[2] == 1 && DESTREG[2] == 1) begin // RF TO RF
+              RF_O2Sel = SRCREG1[1:0];
+              ALU_FunSel = 4'b1011;
+              MuxASel = 2'b11;
+              RF_FunSel = 2'b10;
+              ARF_RSel = 3'b111;
+              
+              case(DESTREG[1:0])
+              2'b00: RF_RSel = 4'b0111;
+              2'b01: RF_RSel = 4'b1011;
+              2'b10: RF_RSel = 4'b1101;
+              2'b11: RF_RSel = 4'b1110;
+              endcase 
+          end
+          
+          else if(SRCREG1[2] == 1 && DESTREG[2] == 0) begin // RF TO ARF
+              RF_O2Sel = SRCREG1[1:0];
+              ALU_FunSel = 4'b1011;
+              MuxBSel = 2'b11;
+              ARF_FunSel = 2'b10;
+              RF_RSel = 4'b1111;
+              
+              case(DESTREG[1:0])
+              2'b00: ARF_RSel = 3'b011;
+              2'b01: ARF_RSel = 3'b011;
+              2'b10: ARF_RSel = 3'b101;
+              2'b11: ARF_RSel = 3'b110;
+              endcase
+          end
+          
+          else if(SRCREG1[2] == 0 && DESTREG[2] == 1) begin // ARF TO RF
+               ARF_OutASel = SRCREG1[1:0]; 
+               MuxCSel = 1'b0;
+               ALU_FunSel = 4'b1011;
+               MuxASel = 2'b11;
+               RF_FunSel = 2'b10;
+               ARF_RSel = 3'b111;
+               
+               case(DESTREG[1:0])
+               2'b00: RF_RSel = 4'b0111;
+               2'b01: RF_RSel = 4'b1011;
+               2'b10: RF_RSel = 4'b1101;
+               2'b11: RF_RSel = 4'b1110;
+               endcase  
+          end
+            
+          else if(SRCREG1[2] == 0 && DESTREG[2] == 0) begin // ARF TO ARF
+               ARF_OutASel = SRCREG1[1:0]; 
+               MuxCSel = 1'b0;
+               ALU_FunSel = 4'b1011;
+               MuxBSel = 2'b11;
+               RF_RSel = 4'b1111;
+               ARF_FunSel = 2'b10;
+               
+               case(DESTREG[1:0])
+               2'b00: ARF_RSel = 3'b011;
+               2'b01: ARF_RSel = 3'b011;
+               2'b10: ARF_RSel = 3'b101;
+               2'b11: ARF_RSel = 3'b110;
+               endcase   
+          end  
+          OPCODELOADED = 0;
+          CHECK = 4'b0000;
+        end // END OF OPCODE 9
+    
+        4'b0110: // OPCODE 6
+        begin
+        
+          Mem_WR = 1'b0;
+           
+          if(SRCREG1[2] == 1 && DESTREG[2] == 1) begin // RF TO RF
+              RF_O2Sel = SRCREG1[1:0];
+              ALU_FunSel = 4'b1010;
+              MuxASel = 2'b11;
+              RF_FunSel = 2'b10;
+              ARF_RSel = 3'b111;
+              
+              case(DESTREG[1:0])
+              2'b00: RF_RSel = 4'b0111;
+              2'b01: RF_RSel = 4'b1011;
+              2'b10: RF_RSel = 4'b1101;
+              2'b11: RF_RSel = 4'b1110;
+              endcase 
+          end
+          
+          else if(SRCREG1[2] == 1 && DESTREG[2] == 0) begin // RF TO ARF
+              RF_O2Sel = SRCREG1[1:0];
+              ALU_FunSel = 4'b1010;
+              MuxBSel = 2'b11;
+              ARF_FunSel = 2'b10;
+              RF_RSel = 4'b1111;
+              
+              case(DESTREG[1:0])
+              2'b00: ARF_RSel = 3'b011;
+              2'b01: ARF_RSel = 3'b011;
+              2'b10: ARF_RSel = 3'b101;
+              2'b11: ARF_RSel = 3'b110;
+              endcase
+          end
+          
+          else if(SRCREG1[2] == 0 && DESTREG[2] == 1) begin // ARF TO RF
+               ARF_OutASel = SRCREG1[1:0]; 
+               MuxCSel = 1'b0;
+               ALU_FunSel = 4'b1010;
+               MuxASel = 2'b11;
+               RF_FunSel = 2'b10;
+               ARF_RSel = 3'b111;
+               
+               case(DESTREG[1:0])
+               2'b00: RF_RSel = 4'b0111;
+               2'b01: RF_RSel = 4'b1011;
+               2'b10: RF_RSel = 4'b1101;
+               2'b11: RF_RSel = 4'b1110;
+               endcase  
+          end
+            
+          else if(SRCREG1[2] == 0 && DESTREG[2] == 0) begin // ARF TO ARF
+               ARF_OutASel = SRCREG1[1:0]; 
+               MuxCSel = 1'b0;
+               ALU_FunSel = 4'b1010;
+               MuxBSel = 2'b11;
+               RF_RSel = 4'b1111;
+               ARF_FunSel = 2'b10;
+               
+               case(DESTREG[1:0])
+               2'b00: ARF_RSel = 3'b011;
+               2'b01: ARF_RSel = 3'b011;
+               2'b10: ARF_RSel = 3'b101;
+               2'b11: ARF_RSel = 3'b110;
+               endcase   
+          end  
+          CHECK = 4'b0000;
+          OPCODELOADED = 0;
+        end // END OF OPCODE 10
+    
+        4'b0011: // OPCODE 3
+        begin
+        
+        Mem_WR = 1'b0;
+    
+            if(SRCREG1[2] == 1 && SRCREG2[2] == 1 && DESTREG[2] == 1) begin // RF + RF -> RF
+                RF_O1Sel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b1;
+                ALU_FunSel = 4'b0100;
+                MuxASel = 2'b11;
+                RF_FunSel = 2'b10;
+                ARF_RSel = 3'b111;
+                $display ("ALU OUT AFTER SUMMATION : %d",ALU1.ALUOut);
+                case(DESTREG[1:0])
+                2'b00: RF_RSel = 4'b0111;
+                2'b01: RF_RSel = 4'b1011;
+                2'b10: RF_RSel = 4'b1101;
+                2'b11: RF_RSel = 4'b1110;
+                endcase
+            end
+            
+            else if(SRCREG1[2] == 1 && SRCREG2[2] == 1 && DESTREG[2] == 0) begin // RF + RF -> ARF
+                RF_O1Sel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b1;
+                ALU_FunSel = 4'b0100;
+                MuxBSel = 2'b11;
+                RF_RSel = 4'b1111;
+                ARF_FunSel = 2'b10;
+                
+                case(DESTREG[1:0])
+                2'b00: ARF_RSel = 3'b011;
+                2'b01: ARF_RSel = 3'b011;
+                2'b10: ARF_RSel = 3'b101;
+                2'b11: ARF_RSel = 3'b110;
+                endcase  
+            end
+            
+            else if(SRCREG1[2] == 0 && SRCREG2[2] == 1 && DESTREG[2] == 1) begin // ARF + RF ->  RF
+                ARF_OutASel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b0;
+                ALU_FunSel = 4'b0100;
+                MuxASel = 2'b11;
+                ARF_RSel = 3'b111;
+                RF_FunSel = 2'b10;
+                
+                case(DESTREG[1:0])
+                2'b00: RF_RSel = 4'b0111;
+                2'b01: RF_RSel = 4'b1011;
+                2'b10: RF_RSel = 4'b1101;
+                2'b11: RF_RSel = 4'b1110;
+                endcase    
+            end
+            
+            else if(SRCREG1[2] == 0 && SRCREG2[2] == 1 && DESTREG[2] == 0) begin // ARF + RF -> ARF
+                ARF_OutASel = SRCREG1[1:0];
+                RF_O2Sel = SRCREG2[1:0];
+                MuxCSel = 1'b0;
+                ALU_FunSel = 4'b0100;
+                MuxBSel = 2'b11;
+                RF_RSel = 4'b1111;
+                ARF_FunSel = 2'b10;
+                
+                case(DESTREG[1:0])
+                2'b00: ARF_RSel = 3'b011;
+                2'b01: ARF_RSel = 3'b011;
+                2'b10: ARF_RSel = 3'b101;
+                2'b11: ARF_RSel = 3'b110;
+                endcase   
+            end
+            OPCODELOADED = 0;
+            CHECK = 4'b0000;
+        end // END OF OPCODE 7
+        
+        4'b0100: begin// OPCODE 4
+            Mem_WR = 1'b0;
+            
+            if (CHECK == 4'b1110)
+            begin
+                  Mem_WR = 1'b0;
+                  
+                  if(SRCREG1[2] == 1 && DESTREG[2] == 1) begin // RF TO RF
+                      RF_O2Sel = SRCREG1[1:0];
+                      ALU_FunSel = 4'b0011;
+                      MuxASel = 2'b11;
+                      RF_FunSel = 2'b10;
+                      ARF_RSel = 3'b111;
+                      
+                      case(DESTREG[1:0])
+                      2'b00: RF_RSel = 4'b0111;
+                      2'b01: RF_RSel = 4'b1011;
+                      2'b10: RF_RSel = 4'b1101;
+                      2'b11: RF_RSel = 4'b1110;
+                      endcase 
+                  end
+                  
+                  else if(SRCREG1[2] == 1 && DESTREG[2] == 0) begin // RF TO ARF
+                      RF_O2Sel = SRCREG1[1:0];
+                      ALU_FunSel = 4'b0011;
+                      MuxBSel = 2'b11;
+                      ARF_FunSel = 2'b10;
+                      RF_RSel = 4'b1111;
+                      
+                      case(DESTREG[1:0])
+                      2'b00: ARF_RSel = 3'b011;
+                      2'b01: ARF_RSel = 3'b011;
+                      2'b10: ARF_RSel = 3'b101;
+                      2'b11: ARF_RSel = 3'b110;
+                      endcase
+                  end
+                  
+                  else if(SRCREG1[2] == 0 && DESTREG[2] == 1) begin // ARF TO RF
+                       ARF_OutASel = SRCREG1[1:0]; 
+                       MuxCSel = 1'b0;
+                       ALU_FunSel = 4'b0010;
+                       MuxASel = 2'b11;
+                       RF_FunSel = 2'b10;
+                       ARF_RSel = 3'b111;
+                       
+                       case(DESTREG[1:0])
+                       2'b00: RF_RSel = 4'b0111;
+                       2'b01: RF_RSel = 4'b1011;
+                       2'b10: RF_RSel = 4'b1101;
+                       2'b11: RF_RSel = 4'b1110;
+                       endcase  
+                  end
+                  
+                  else if(SRCREG1[2] == 0 && DESTREG[2] == 0) begin // ARF TO ARF
+                       ARF_OutASel = SRCREG1[1:0]; 
+                       MuxCSel = 1'b0;
+                       ALU_FunSel = 4'b0010;
+                       MuxBSel = 2'b11;
+                       RF_RSel = 4'b1111;
+                       ARF_FunSel = 2'b10;
+                       
+                       case(DESTREG[1:0])
+                       2'b00: ARF_RSel = 3'b011;
+                       2'b01: ARF_RSel = 3'b011;
+                       2'b10: ARF_RSel = 3'b101;
+                       2'b11: ARF_RSel = 3'b110;
+                       endcase   
+                  end
+                  CHECK = 4'b0100;
+                end
+                
+                else if (CHECK == 4'b0100)
+                begin 
+                    if(DESTREG[2] == 0)begin// ARF
+                        ARF_FunSel = 2'b01;
+                        
+                        case(DESTREG[1:0])
+                        2'b00: ARF_RSel = 3'b011;
+                        2'b01: ARF_RSel = 3'b011;
+                        2'b10: ARF_RSel = 3'b101;
+                        2'b11: ARF_RSel = 3'b110;
+                        endcase
+                        
+                        RF_RSel = 4'b1111;
+                    end
+                    
+                    if(DESTREG[2] == 1)begin// RF
+                        RF_FunSel = 2'b01;
+                        
+                        case(DESTREG[1:0])
+                        2'b00: RF_RSel = 4'b0111;
+                        2'b01: RF_RSel = 4'b1011;
+                        2'b10: RF_RSel = 4'b1101;
+                        2'b11: RF_RSel = 4'b1110;
+                        endcase 
+                        
+                        ARF_RSel = 3'b111;
+                    end
+                    CHECK = 4'b0101;
+                    
+                end
+                
+                else if (CHECK == 4'b0101)
+                   begin
+                        RF_O2Sel = SRCREG2[1:0];
+                        
+                        if(DESTREG[2] == 0)begin// ARF
+                            ARF_OutASel = DESTREG[1:0];
+                            ARF_FunSel = 2'b10;
+                            MuxCSel = 1'b0;
+                            ALU_FunSel = 4'b0100;
+                            MuxBSel = 2'b11;
+                            
+                            case(DESTREG[1:0])
+                            2'b00: ARF_RSel = 3'b011;
+                            2'b01: ARF_RSel = 3'b011;
+                            2'b10: ARF_RSel = 3'b101;
+                            2'b11: ARF_RSel = 3'b110;
+                            endcase 
+                           
+                           RF_RSel = 4'b1111;
+                        end
+                        
+                        if(DESTREG[2] == 1)begin // RF
+                            MuxASel = 2'b11;
+                            ALU_FunSel = 4'b0100;
+                            RF_O1Sel = DESTREG[1:0];
+                            ARF_RSel = 3'b111;
+                            RF_FunSel = 2'b10;
+                            MuxCSel = 1'b1;
+                            case(DESTREG[1:0])
+                            2'b00: RF_RSel = 4'b0111;
+                            2'b01: RF_RSel = 4'b1011;
+                            2'b10: RF_RSel = 4'b1101;
+                            2'b11: RF_RSel = 4'b1110;
+                            endcase 
+                        end
+                   OPCODELOADED = 0;  
+                   CHECK = 4'b0000;
+                   end
+                 
+            end // END OF OPCODE 8
+            
+            
+        4'b0111: begin// OPCODE 7 
+            Mem_WR = 1'b0;
+            
+            if (CHECK == 4'b1110)
+            begin               
+                  if(SRCREG1[2] == 1 && DESTREG[2] == 1) begin // RF TO RF
+                      RF_O2Sel = SRCREG1[1:0];
+                      ALU_FunSel = 4'b0001;
+                      MuxASel = 2'b11;
+                      RF_FunSel = 2'b10;
+                      ARF_RSel = 3'b111;
+                      
+                      case(DESTREG[1:0])
+                      2'b00: RF_RSel = 4'b0111;
+                      2'b01: RF_RSel = 4'b1011;
+                      2'b10: RF_RSel = 4'b1101;
+                      2'b11: RF_RSel = 4'b1110;
+                      endcase 
+                  end
+                  
+                  else if(SRCREG1[2] == 1 && DESTREG[2] == 0) begin // RF TO ARF
+                      RF_O2Sel = SRCREG1[1:0];
+                      ALU_FunSel = 4'b0001;
+                      MuxBSel = 2'b11;
+                      ARF_FunSel = 2'b10;
+                      RF_RSel = 4'b1111;
+                      
+                      case(DESTREG[1:0])
+                      2'b00: ARF_RSel = 3'b011;
+                      2'b01: ARF_RSel = 3'b011;
+                      2'b10: ARF_RSel = 3'b101;
+                      2'b11: ARF_RSel = 3'b110;
+                      endcase
+                  end
+                  
+                  else if(SRCREG1[2] == 0 && DESTREG[2] == 1) begin // ARF TO RF
+                       ARF_OutASel = SRCREG1[1:0]; 
+                       MuxCSel = 1'b0;
+                       ALU_FunSel = 4'b0000;
+                       MuxASel = 2'b11;
+                       RF_FunSel = 2'b10;
+                       ARF_RSel = 3'b111;
+                       
+                       case(DESTREG[1:0])
+                       2'b00: RF_RSel = 4'b0111;
+                       2'b01: RF_RSel = 4'b1011;
+                       2'b10: RF_RSel = 4'b1101;
+                       2'b11: RF_RSel = 4'b1110;
+                       endcase  
+                  end
+                    
+                  else if(SRCREG1[2] == 0 && DESTREG[2] == 0) begin // ARF TO ARF
+                       ARF_OutASel = SRCREG1[1:0]; 
+                       MuxCSel = 1'b0;
+                       ALU_FunSel = 4'b0000;
+                       MuxBSel = 2'b11;
+                       RF_RSel = 4'b1111;
+                       ARF_FunSel = 2'b10;
+                       
+                       case(DESTREG[1:0])
+                       2'b00: ARF_RSel = 3'b011;
+                       2'b01: ARF_RSel = 3'b011;
+                       2'b10: ARF_RSel = 3'b101;
+                       2'b11: ARF_RSel = 3'b110;
+                       endcase   
+                  end  
+                CHECK = 4'b0100;
+            end    
+                
+                
+             else if(CHECK == 4'b0100) begin
+             
+                    if(DESTREG[2] == 0)begin// ARF
+                       ARF_FunSel = 2'b01;         
+                       case(DESTREG[1:0])
+                       2'b00: ARF_RSel = 3'b011;
+                       2'b01: ARF_RSel = 3'b011;
+                       2'b10: ARF_RSel = 3'b101;
+                       2'b11: ARF_RSel = 3'b110;
+                       endcase         
+                        RF_RSel = 4'b1111;
+                       end
+                             
+                       if(DESTREG[2] == 1)begin// RF
+                            RF_FunSel = 2'b01;    
+                           case(DESTREG[1:0])
+                           2'b00: RF_RSel = 4'b0111;
+                           2'b01: RF_RSel = 4'b1011;
+                           2'b10: RF_RSel = 4'b1101;
+                           2'b11: RF_RSel = 4'b1110;
+                           endcase      
+                            ARF_RSel = 3'b111;
+                        end
+                        
+                        CHECK = 4'b0101;
+             end   
+             
+             else if(CHECK == 4'b0101)begin
+                   ARF_RSel = 3'b111;
+                   RF_RSel = 4'b1111;
+                   
+                  if(DESTREG[2] == 0)begin// ARF
+                    ARF_OutASel = DESTREG[1:0];
+                    MuxCSel = 1'b0;
+                    ALU_FunSel= 4'b0000;
+                  end
+                  
+                  else if(DESTREG[2] == 1)begin// RF
+                      RF_O2Sel = DESTREG[1:0];
+                      ALU_FunSel= 4'b0001;
+                               
+                  end
+                OPCODELOADED = 0;
+                CHECK = 4'b0000;
+             end
+             
+           end
+    
+        4'b1000: begin// OPCODE 8
+            ;
+            Mem_WR = 1'b0;
+            
+            if (CHECK == 4'b1110)
+            begin               
+                          if(SRCREG1[2] == 1 && DESTREG[2] == 1) begin // RF TO RF
+                              RF_O2Sel = SRCREG1[1:0];
+                              ALU_FunSel = 4'b0001;
+                              MuxASel = 2'b11;
+                              RF_FunSel = 2'b10;
+                              ARF_RSel = 3'b111;
+                              
+                              case(DESTREG[1:0])
+                              2'b00: RF_RSel = 4'b0111;
+                              2'b01: RF_RSel = 4'b1011;
+                              2'b10: RF_RSel = 4'b1101;
+                              2'b11: RF_RSel = 4'b1110;
+                              endcase 
+                          end
+                          
+                          else if(SRCREG1[2] == 1 && DESTREG[2] == 0) begin // RF TO ARF
+                              RF_O2Sel = SRCREG1[1:0];
+                              ALU_FunSel = 4'b0001;
+                              MuxBSel = 2'b11;
+                              ARF_FunSel = 2'b10;
+                              RF_RSel = 4'b1111;
+                              
+                              case(DESTREG[1:0])
+                              2'b00: ARF_RSel = 3'b011;
+                              2'b01: ARF_RSel = 3'b011;
+                              2'b10: ARF_RSel = 3'b101;
+                              2'b11: ARF_RSel = 3'b110;
+                              endcase
+                          end
+                          
+                          else if(SRCREG1[2] == 0 && DESTREG[2] == 1) begin // ARF TO RF
+                               ARF_OutASel = SRCREG1[1:0]; 
+                               MuxCSel = 1'b0;
+                               ALU_FunSel = 4'b0000;
+                               MuxASel = 2'b11;
+                               RF_FunSel = 2'b10;
+                               ARF_RSel = 3'b111;
+                               
+                               case(DESTREG[1:0])
+                               2'b00: RF_RSel = 4'b0111;
+                               2'b01: RF_RSel = 4'b1011;
+                               2'b10: RF_RSel = 4'b1101;
+                               2'b11: RF_RSel = 4'b1110;
+                               endcase  
+                          end
+                            
+                          else if(SRCREG1[2] == 0 && DESTREG[2] == 0) begin // ARF TO ARF
+                               ARF_OutASel = SRCREG1[1:0]; 
+                               MuxCSel = 1'b0;
+                               ALU_FunSel = 4'b0000;
+                               MuxBSel = 2'b11;
+                               RF_RSel = 4'b1111;
+                               ARF_FunSel = 2'b10;
+                               
+                               case(DESTREG[1:0])
+                               2'b00: ARF_RSel = 3'b011;
+                               2'b01: ARF_RSel = 3'b011;
+                               2'b10: ARF_RSel = 3'b101;
+                               2'b11: ARF_RSel = 3'b110;
+                               endcase   
+                          end  
+                        CHECK = 4'b0100;
+                    end
+                
+                
+                
+             else if(CHECK == 4'b0100) begin        
+                       if(DESTREG[2] == 0)begin// ARF
+                                ARF_FunSel = 2'b00;          
+                                case(DESTREG[1:0])
+                                2'b00: ARF_RSel = 3'b011;
+                                2'b01: ARF_RSel = 3'b011;
+                                2'b10: ARF_RSel = 3'b101;
+                                2'b11: ARF_RSel = 3'b110;
+                                endcase         
+                                 RF_RSel = 4'b1111;
+                                end
+                                      
+                                if(DESTREG[2] == 1)begin// RF
+                                     RF_FunSel = 2'b00;     
+                                    case(DESTREG[1:0])
+                                    2'b00: RF_RSel = 4'b0111;
+                                    2'b01: RF_RSel = 4'b1011;
+                                    2'b10: RF_RSel = 4'b1101;
+                                    2'b11: RF_RSel = 4'b1110;
+                                    endcase      
+                                     ARF_RSel = 3'b111;
+                                 end
+                                 CHECK = 4'b0101;
+             end   
+             
+             else if(CHECK == 4'b0101)begin
+                   ARF_RSel = 3'b111;
+                   RF_RSel = 4'b1111;
+                   
+                  if(DESTREG[2] == 0)begin// ARF
+                    ARF_OutASel = DESTREG[1:0];
+                    MuxCSel = 1'b0;
+                    ALU_FunSel= 4'b0000;
+                  end
+                  
+                  else if(DESTREG[2] == 1)begin// RF
+                       
+                      RF_O2Sel = DESTREG[1:0];
+                      ALU_FunSel= 4'b0001;
+                      $display ("BOUT: %d",ALU1.BOut);
+                  end
+                OPCODELOADED = 0;
+                CHECK = 4'b0000;
+             end
+             
+             
+           end
+            
+        4'b1110: begin// OPCODE 15 E
+            Mem_WR = 0;
+           
+            if (CHECK == 4'b1110)
+            begin
+                RF_RSel = 4'b1111;
+                ARF_FunSel = 2'b01;
+                ARF_RSel = 3'b110;
+                CHECK = 4'b0100;
+            end
+            
+            else if (CHECK == 4'b0100)
+            begin
+               ARF_OutBSel = 2'b11;
+               
+               if(DESTREG[2]==1'b0) begin
+                   MuxBSel = 2'b10;
+                   ARF_FunSel = 2'b10; 
+                   
+                   case(DESTREG[1:0])
+                   2'b00: ARF_RSel = 3'b011;
+                   2'b01: ARF_RSel = 3'b011;
+                   2'b10: ARF_RSel = 3'b101;
+                   2'b11: ARF_RSel = 3'b110;
+                   endcase 
+                   RF_RSel = 4'b1111;              
+               end
+               
+               else if(DESTREG[2]==1'b1) begin
+                    MuxASel = 2'b01;
+                    RF_FunSel = 2'b10;
+                    
+                    case(DESTREG[1:0])
+                    2'b00: RF_RSel = 4'b0111;
+                    2'b01: RF_RSel = 4'b1011;
+                    2'b10: RF_RSel = 4'b1101;
+                    2'b11: RF_RSel = 4'b1110;
+                    endcase
+                    ARF_RSel = 3'b111;                     
+               end
+               OPCODELOADED = 0;
+               CHECK = 4'b0000;
+               
+            end
+            
+            
+            end
+            
+        4'b1111: begin// OPCODE 16 F
+            
+            if (CHECK == 4'b1110)
+             begin
+                CHECK = 4'b0100;
+                ARF_RSel = 3'b111; 
+                RF_RSel = 4'b1111;
+                Mem_WR = 1;       
+                ARF_OutBSel = 2'b11;     
+                if(SRCREG1[2]==1'b0)begin
+                    ARF_OutASel = SRCREG1[1:0]; 
+                    MuxCSel = 1'b0;
+                    ALU_FunSel = 4'b0000; 
+                end
+                
+                else if(SRCREG1[2]==1'b1)begin
+                    RF_O2Sel = SRCREG1[1:0];
+                    ALU_FunSel = 4'b0001; 
+                end            
+                
+            
+             end
+            else if (CHECK == 4'b0100)
+              begin
+              Mem_WR = 0;
+              RF_RSel = 4'b1111;
+              ARF_RSel = 3'b110; 
+              ARF_FunSel = 2'b00;
+              OPCODELOADED = 0;
+              
+              CHECK = 4'b0000;
+              end         
+             
+            end
+    
+        endcase
+    
+    end //4 */
+    
 
-    end
 
-    assign SeqCounter_Reset = temp_SeqCounter_Reset;
-    assign RF_O1Sel = temp_RF_O1Sel;
-    assign RF_O2Sel = temp_RF_O2Sel;
-    assign RF_FunSel = temp_RF_FunSel;
-    assign RF_RSel = temp_RF_RSel;
-    assign RF_TSel = temp_RF_TSel;
-    assign ALU_FunSel = temp_ALU_FunSel;
-    assign ARF_OutASel = temp_ARF_OutASel;
-    assign ARF_OutBSel = temp_ARF_OutBSel;
-    assign ARF_FunSel = temp_ARF_FunSel;
-    assign ARF_RSel = temp_ARF_RSel;
-    assign IR_LH = temp_IR_LH;
-    assign IR_Enable = temp_IR_Enable;
-    assign IR_FunSel = temp_IR_FunSel;
-    assign Mem_WR = temp_Mem_WR;
-    assign Mem_CS = temp_Mem_CS;
-    assign MuxASel = temp_MuxASel;
-    assign MuxBSel = temp_MuxBSel;
-    assign MuxCSel = temp_MuxCSel;
+end//13
 
 endmodule
