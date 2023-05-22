@@ -499,7 +499,7 @@ module ControlUnit(
 
     input Z_Flag, C_Flag, N_Flag, O_Flag,
 
-    output wire SeqCounter_Reset,
+    output wire SC_reset,
 
     output wire [2:0] RF_O1Sel, 
     output wire [2:0] RF_O2Sel, 
@@ -552,7 +552,7 @@ module ControlUnit(
     reg [1:0] temp_MuxBSel;
     reg       temp_MuxCSel;
 
-    reg temp_SeqCounter_Reset = 1'b0;
+    reg temp_SC_reset = 1'b0;
 
 
     always@(*) begin 
@@ -625,12 +625,13 @@ module ControlUnit(
                 temp_MuxBSel = 2'b10;
                 temp_ARF_RSel = 4'b1000;
                 temp_ARF_FunSel = 2'b01;
-                temp_SC_reset = 1'b1; //Counter reset is 1 because BRA instruction is finished in 1 clock cycle
 
                 // Disable IR, Memory, and Register File
                 temp_IR_Enable = 1'b0;
                 temp_RF_RSel = 4'b0000;
                 temp_Mem_CS = 1'b1;
+
+                temp_SC_reset = 1'b1; //Counter reset is 1 because BRA instruction is finished in 1 clock cycle
 
             end
 
@@ -651,10 +652,10 @@ module ControlUnit(
                 temp_SC_reset = 1'b1; //Counter reset is 1 because LD instruction is finished in 1 clock cycle
 
                 //Selecting the RF Register to load to based on REGSEL
-                if(REGSEL == 2'b00)      temp_RF_RSel <= 4'b1000
-                else if(REGSEL == 2'b01) temp_RF_RSel <= 4'b0100;
-                else if(REGSEL == 2'b10) temp_RF_RSel <= 4'b0010;
-                else if(REGSEL == 2'b11) temp_RF_RSel <= 4'b0001;
+                if(RSEL == 2'b00)      temp_RF_RSel <= 4'b1000;
+                else if(RSEL == 2'b01) temp_RF_RSel <= 4'b0100;
+                else if(RSEL == 2'b10) temp_RF_RSel <= 4'b0010;
+                else if(RSEL == 2'b11) temp_RF_RSel <= 4'b0001;
 
             end
 
@@ -671,10 +672,10 @@ module ControlUnit(
                 temp_SC_reset = 1'b1; //Counter reset is 1 because LD instruction is finished in 1 clock cycle
 
                 //Selecting the RF Register to load to based on REGSEL
-                if(REGSEL == 2'b00)      temp_RF_RSel <= 4'b1000
-                else if(REGSEL == 2'b01) temp_RF_RSel <= 4'b0100;
-                else if(REGSEL == 2'b10) temp_RF_RSel <= 4'b0010;
-                else if(REGSEL == 2'b11) temp_RF_RSel <= 4'b0001;
+                if(RSEL == 2'b00)      temp_RF_RSel <= 4'b1000;
+                else if(RSEL == 2'b01) temp_RF_RSel <= 4'b0100;
+                else if(RSEL == 2'b10) temp_RF_RSel <= 4'b0010;
+                else if(RSEL == 2'b11) temp_RF_RSel <= 4'b0001;
 
             end
 
@@ -740,15 +741,15 @@ module ControlUnit(
 
                 // if(SREG2[2]) begin 
                 //     case(SREG2[1:0]) 
-                //         2'b00: temp_ARF_OutASel <= 2'b01;
-                //         2'b01: temp_ARF_OutASel <= 2'b00;
-                //         2'b10: temp_ARF_OutASel <= 2'b11;
-                //         2'b11: temp_ARF_OutASel <= 2'b11;
+                //         2'b00: temp_ARF_OutBSel <= 2'b01;
+                //         2'b01: temp_ARF_OutBSel <= 2'b00;
+                //         2'b10: temp_ARF_OutBSel <= 2'b11;
+                //         2'b11: temp_ARF_OutBSel <= 2'b11;
                 //     endcase
                 // end
                 // else 
                 if (~SREG2[2]) begin 
-                    temp_RF_O1Sel = {1'b1, SREG1[1:0]};
+                    temp_RF_O2Sel = {1'b1, SREG2[1:0]};
                 end
                 
 
@@ -860,8 +861,6 @@ module ControlUnit(
                     
             end
 
-            
-
         end
 
         else if (T3) begin 
@@ -900,15 +899,15 @@ module ControlUnit(
 
             // if(SREG2[2]) begin 
             //     case(SREG2[1:0]) 
-            //         2'b00: temp_ARF_OutASel <= 2'b01;
-            //         2'b01: temp_ARF_OutASel <= 2'b00;
-            //         2'b10: temp_ARF_OutASel <= 2'b11;
-            //         2'b11: temp_ARF_OutASel <= 2'b11;
+            //         2'b00: temp_ARF_OutBSel <= 2'b01;
+            //         2'b01: temp_ARF_OutBSel <= 2'b00;
+            //         2'b10: temp_ARF_OutBSel <= 2'b11;
+            //         2'b11: temp_ARF_OutBSel <= 2'b11;
             //     endcase
             // end
             // else 
             if (~SREG2[2]) begin 
-                temp_RF_O1Sel = {1'b1, SREG1[1:0]};
+                temp_RF_O2Sel = {1'b1, SREG2[1:0]};
             end
             
             if(INC | DEC) begin 
@@ -972,6 +971,152 @@ module ControlUnit(
     assign MuxBSel = temp_MuxBSel;
     assign MuxCSel = temp_MuxCSel;
 
-    assign SeqCounter_Reset = temp_SeqCounter_Reset;
+    assign SC_reset = temp_SC_reset;
+
+endmodule
+
+module CPUSystem(
+    input Clock,
+    input Reset,
+    input [7:0] T_dec,
+);
+
+
+    wire [7:0] RF_O1Sel;
+    wire [7:0] RF_O2Sel;
+    wire [1:0] RF_FunSel;
+    wire [3:0] RF_RSel;
+    wire [3:0] RF_TSel;
+    wire [3:0] ALU_FunSel;
+    wire [7:0] ARF_OutASel;
+    wire [7:0] ARF_OutBSel;
+    wire [1:0] ARF_FunSel;
+    wire [3:0] ARF_RSel;
+    wire IR_LH;
+    wire IR_Enable;
+    wire [1:0] IR_FunSel;
+    wire Mem_WR;
+    wire Mem_CS;
+    wire [1:0] MuxASel;
+    wire [1:0] MuxBSel;
+    wire MuxCSel;
+
+    wire AND;
+    wire OR;
+    wire NOT;
+    wire ADD;
+    wire SUB;
+    wire LSR;
+    wire LSL;
+    wire INC;
+    wire DEC;
+    wire BRA;
+    wire BNE;
+    wire MOV;
+    wire LD;
+    wire ST;
+    wire PUL;
+    wire PSH;
+
+    wire [3:0] T_binary;
+    
+
+    ALUSystem ALU_Sys(
+        .RF_O1Sel(RF_O1Sel), 
+        .RF_O2Sel(RF_O2Sel), 
+        .RF_FunSel(RF_FunSel),
+        .RF_RSel(RF_RSel),
+        .RF_TSel(RF_TSel),
+        .ALU_FunSel(ALU_FunSel),
+        .ARF_OutASel(ARF_OutASel), 
+        .ARF_OutBSel(ARF_OutBSel),
+        .ARF_FunSel(ARF_FunSel),
+        .ARF_RSel(ARF_RSel),
+        .IR_LH(IR_LH),
+        .IR_Enable(IR_Enable),
+        .IR_FunSel(IR_FunSel),
+        .Mem_WR(Mem_WR),
+        .Mem_CS(Mem_CS),
+        .MuxASel(MuxASel),
+        .MuxBSel(MuxBSel),
+        .MuxCSel(MuxCSel),
+        .Clock(Clock)
+    );
+
+    ControlUnit Ctrl_Unit(
+        T_dec[0], T_dec[1], T_dec[2], T_dec[3], T_dec[4], T_dec[5], T_dec[6], T_dec[7],
+        AND,
+        OR,
+        NOT,
+        ADD,
+        SUB,
+        LSR,
+        LSL,
+        INC,
+        DEC,
+        BRA,
+        BNE,
+        MOV,
+        LD,
+        ST,
+        PUL,
+        PSH,
+
+        .RSEL(ALU_Sys.IR_Out[9:8]),
+        .DSTREG(ALU_Sys.IR_Out[11:8]),
+        .SREG1(ALU_Sys.IR_Out[7:4]),
+        .SREG2(ALU_Sys.IR_Out[3:0]),
+        .AddressMode(ALU_Sys.IR_Out[10]),
+
+        ALU_Sys.ALU_FlagOut[3], ALU_Sys.ALU_FlagOut[2], ALU_Sys.ALU_FlagOut[1], ALU_Sys.ALU_FlagOut[0],
+
+        Reset,
+
+        RF_O1Sel, 
+        RF_O2Sel, 
+        RF_FunSel,
+        RF_RSel,
+        RF_TSel,
+        ALU_FunSel,
+        ARF_OutASel, 
+        ARF_OutBSel,
+        ARF_FunSel,
+        ARF_RSel,
+        IR_LH,
+        IR_Enable,
+        IR_FunSel,
+        Mem_WR,
+        Mem_CS,
+        MuxASel,
+        MuxBSel,
+        MuxCSel
+    );
+
+    Dec_16_1 IR_Decoder(ALU_Sys.IR_Out[15:12],
+        AND,
+        OR,
+        NOT,
+        ADD,
+        SUB,
+        LSR,
+        LSL,
+        INC,
+        DEC,
+        BRA,
+        BNE,
+        MOV,
+        LD,
+        ST,
+        PUL,
+        PSH
+    );
+
+    SeqCounter SC(
+        Clock,
+        Reset,
+        T_binary
+    );
+
+    Dec_8_1 SC_Decoder(T_binary, T_dec[7], T_dec[6], T_dec[5], T_dec[4], T_dec[3], T_dec[2], T_dec[1], T_dec[0]);
 
 endmodule
