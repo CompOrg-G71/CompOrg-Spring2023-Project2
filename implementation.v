@@ -682,7 +682,7 @@ module ControlUnit(
 
                 temp_IR_Enable = 1'b0; // no writing to IR
 
-                temp_RF_O2Sel = {1'b1, REGSEL}; // Selecting the RF Register to write to memory based on REGSEL
+                temp_RF_O2Sel = {1'b1, RSEL}; // Selecting the RF Register to write to memory based on RSEL
                 temp_RF_RSel = 4'b0000; // Disabling RF
 
                 temp_ALU_FunSel = 4'b0001; // OutALU is O2Sel into memory data input
@@ -697,7 +697,7 @@ module ControlUnit(
 
             end
 
-            else if(MOV|AND|OR|NOT|ADD|SUB|LSR|LSL|INC|DEC) begin // all of these operations have a common execution sequence
+            else if(MOV|AND|OR|NOT|ADD|SUB|LSR|LSL|INC|DEC|PSH) begin // all of these operations have a common execution sequence
 
                 temp_Mem_CS = 1'b1; // Disabling memory
                 temp_IR_Enable = 1'b0; // no writing to IR
@@ -828,8 +828,41 @@ module ControlUnit(
                     end
 
                 end
+
+                if (PSH & ~SREG1[2]) begin // PSH at T2, Write to memory first
+
+                    temp_ALU_FunSel = 4'b0000; // PASS A to OutALU
+
+                    temp_MuxCSel = 1'b0; // Selecting RF_O1 as input to ALU
+
+                    temp_IR_Enable = 1'b0 // Disable IR
+
+                    temp_RF_RSel = 4'b0000 // Disabling all RF registers
+                    temp_ARF_RSel = 4'b0000; // Disabling all ARF registers
+
+                    temp_ARF_OutBSel = 2'b01; // Selecting SP as input to Memory Address
+
+                    temp_Mem_WR = 1'b1; // Write to memory
+                    temp_Mem_CS = 1'b0; // Enable memory
+
+                    temp_SC_reset = 1'b0; // Counter is not reset because this instruction takes 2 clock cycles
+                end
+
+                if(PUL & ~SREG1[2]) begin // INCREMENT SP
+
+                    temp_RF_RSel = 4'b0000 // Disabling all RF registers
+                    temp_ARF_RSel = 4'b0010; // Enabling SP register
+
+                    temp_ARF_FunSel = 2'b11; // Increment Operation on ARF
+
+                    temp_IR_Enable = 1'b0 // Disable IR
+                    
+                    temp_SC_reset = 1'b0; // Counter is not reset because this instruction takes 2 clock cycles
+                end
                     
             end
+
+            
 
         end
 
@@ -846,6 +879,36 @@ module ControlUnit(
                 end
 
                 temp_SC_reset = 1'b1; // Counter reset
+            end
+
+            if(PSH & ~SREG1[2]) begin // Decrement SP and Reset Counter
+
+                temp_RF_RSel = 4'b0000; // Disabling all RF registers
+                temp_ARF_RSel = 4'b0010; // Enabling SP Register in ARF
+
+                temp_ARF_FunSel = 2'b10; // Decrement Operation on ARF
+
+                temp_SC_reset = 1'b1; // Counter reset
+            end
+
+            if(PUL & ~SREG1[2]) begin // Store RF[SREG1] in M[SP]
+
+                temp_ALU_FunSel = 4'b0000; // PASS A to OutALU
+
+                temp_MuxCSel = 1'b0; // Selecting RF_O1 as input to ALU
+
+                temp_IR_Enable = 1'b0 // Disable IR
+
+                temp_RF_RSel = 4'b0000 // Disabling all RF registers
+                temp_ARF_RSel = 4'b0000; // Disabling all ARF registers
+
+                temp_ARF_OutBSel = 2'b01; // Selecting SP as input to Memory Address
+
+                temp_Mem_WR = 1'b1; // Write to memory
+                temp_Mem_CS = 1'b0; // Enable memory
+
+                temp_SC_reset = 1'b1; // Counter reset
+
             end
 
         end
