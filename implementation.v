@@ -575,7 +575,7 @@ module ControlUnit(
 
         //Load LSB of M[PC] to IR and increment PC by one
         else if(T0) begin
-            temp_SeqCounter_Reset = 1'b0;
+            temp_SC_reset = 1'b0;
 
             temp_IR_LH = 1'b0;
             temp_IR_Enable = 1'b1;
@@ -593,7 +593,7 @@ module ControlUnit(
         end
 
         else if(T1) begin 
-            temp_SeqCounter_Reset = 1'b0;
+            temp_SC_reset = 1'b0;
 
             temp_IR_LH = 1'b1;
             temp_IR_Enable = 1'b1;
@@ -617,7 +617,7 @@ module ControlUnit(
                 temp_RF_RSel <= 4'b0000;
                 temp_ARF_RSel = 4'b0000;
                 temp_IR_Enable = 1'b0;
-                rMem_CS = 1'b1;
+                temp_Mem_CS = 1'b1;
             end
 
             else if(~AddressMode & ((BRA) | (BNE & ~Z_Flag)))begin // Load LSB of IR to PC
@@ -836,7 +836,7 @@ module ControlUnit(
 
                     temp_MuxCSel = 1'b0; // Selecting RF_O1 as input to ALU
 
-                    temp_IR_Enable = 1'b0 // Disable IR
+                    temp_IR_Enable = 1'b0; // Disable IR
 
                     temp_ARF_RSel = 4'b0000; // Disabling all ARF registers
 
@@ -854,7 +854,7 @@ module ControlUnit(
 
                     temp_ARF_FunSel = 2'b11; // Increment Operation on ARF
 
-                    temp_IR_Enable = 1'b0 // Disable IR
+                    temp_IR_Enable = 1'b0; // Disable IR
                     
                     temp_SC_reset = 1'b0; // Counter is not reset because this instruction takes 2 clock cycles
                 end
@@ -1062,11 +1062,11 @@ module CPUSystem(
         PUL,
         PSH,
 
-        .RSEL(ALU_Sys.IR_Out[9:8]),
-        .DSTREG(ALU_Sys.IR_Out[11:8]),
-        .SREG1(ALU_Sys.IR_Out[7:4]),
-        .SREG2(ALU_Sys.IR_Out[3:0]),
-        .AddressMode(ALU_Sys.IR_Out[10]),
+        ALU_Sys.IR_Out[9:8],
+        ALU_Sys.IR_Out[11:8],
+        ALU_Sys.IR_Out[7:4],
+        ALU_Sys.IR_Out[3:0],
+        ALU_Sys.IR_Out[10],
 
         ALU_Sys.ALU_FlagOut[3], ALU_Sys.ALU_FlagOut[2], ALU_Sys.ALU_FlagOut[1], ALU_Sys.ALU_FlagOut[0],
 
