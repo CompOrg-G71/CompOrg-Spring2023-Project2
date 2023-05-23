@@ -1,0 +1,151 @@
+$date
+	Tue May 23 02:55:58 2023
+$end
+$version
+	Icarus Verilog
+$end
+$timescale
+	1ps
+$end
+$scope module decoder_tb $end
+$var wire 1 ! S9 $end
+$var wire 1 " S8 $end
+$var wire 1 # S7 $end
+$var wire 1 $ S6 $end
+$var wire 1 % S5 $end
+$var wire 1 & S4 $end
+$var wire 1 ' S3 $end
+$var wire 1 ( S2 $end
+$var wire 1 ) S15 $end
+$var wire 1 * S14 $end
+$var wire 1 + S13 $end
+$var wire 1 , S12 $end
+$var wire 1 - S11 $end
+$var wire 1 . S10 $end
+$var wire 1 / S1 $end
+$var wire 1 0 S0 $end
+$var reg 4 1 Ctrl [3:0] $end
+$scope module uut $end
+$var wire 1 0 S0 $end
+$var wire 1 / S1 $end
+$var wire 1 . S10 $end
+$var wire 1 - S11 $end
+$var wire 1 , S12 $end
+$var wire 1 + S13 $end
+$var wire 1 * S14 $end
+$var wire 1 ) S15 $end
+$var wire 1 ( S2 $end
+$var wire 1 ' S3 $end
+$var wire 1 & S4 $end
+$var wire 1 % S5 $end
+$var wire 1 $ S6 $end
+$var wire 1 # S7 $end
+$var wire 1 " S8 $end
+$var wire 1 ! S9 $end
+$var wire 4 2 s [3:0] $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+b0 2
+b0 1
+10
+0/
+0.
+0-
+0,
+0+
+0*
+0)
+0(
+0'
+0&
+0%
+0$
+0#
+0"
+0!
+$end
+#10
+00
+1/
+b1 1
+b1 2
+#20
+00
+1(
+0/
+b10 1
+b10 2
+#30
+0(
+1'
+b11 1
+b11 2
+#40
+00
+1&
+0'
+b100 1
+b100 2
+#50
+0&
+1%
+b101 1
+b101 2
+#60
+0&
+1$
+0%
+b110 1
+b110 2
+#70
+0$
+1#
+b111 1
+b111 2
+#80
+1"
+0#
+b1000 1
+b1000 2
+#90
+0"
+1!
+b1001 1
+b1001 2
+#100
+0"
+1.
+0!
+b1010 1
+b1010 2
+#110
+0.
+1-
+b1011 1
+b1011 2
+#120
+0"
+1,
+0-
+b1100 1
+b1100 2
+#130
+0,
+1+
+b1101 1
+b1101 2
+#140
+0,
+1*
+0+
+b1110 1
+b1110 2
+#150
+0*
+1)
+b1111 1
+b1111 2
+#160

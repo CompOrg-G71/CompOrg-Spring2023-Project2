@@ -174,17 +174,6 @@ always @ (posedge clk) begin
     else if(FunSel == 2'b10)
     begin
         if(RSel[3] == 1) 
-            PC = PC + 1;
-        if(RSel[2] == 1) 
-            AR = AR + 1;
-        if(RSel[1] == 1) 
-            SP = SP + 1;
-        if(RSel[0] == 1)
-            PCPast = PCPast + 1;
-    end
-    else if(FunSel == 2'b11)
-    begin
-        if(RSel[3] == 1) 
             PC = PC - 1;
         if(RSel[2] == 1) 
             AR = AR - 1;
@@ -193,6 +182,18 @@ always @ (posedge clk) begin
         if(RSel[0] == 1)
             PCPast = PCPast - 1;
     end
+    else if(FunSel == 2'b11)
+    begin
+        if(RSel[3] == 1) 
+            PC = PC + 1;
+        if(RSel[2] == 1) 
+            AR = AR + 1;
+        if(RSel[1] == 1) 
+            SP = SP + 1;
+        if(RSel[0] == 1)
+            PCPast = PCPast + 1;
+    end
+    
 
 
     if(OutASel == 2'b00) OutA = AR;
@@ -554,7 +555,6 @@ module ControlUnit(
 
     reg temp_SC_reset = 1'b0;
 
-
     always@(*) begin 
 
         if(T7) begin 
@@ -573,11 +573,11 @@ module ControlUnit(
         end
 
 
-        //Load LSB of M[PC] to IR and increment PC by one
+        //Load MSB of M[PC] to IR and increment PC by one
         else if(T0) begin
             temp_SC_reset = 1'b0;
 
-            temp_IR_LH = 1'b0;
+            temp_IR_LH = 1'b1;
             temp_IR_Enable = 1'b1;
             temp_IR_FunSel = 2'b01;
 
@@ -595,7 +595,7 @@ module ControlUnit(
         else if(T1) begin 
             temp_SC_reset = 1'b0;
 
-            temp_IR_LH = 1'b1;
+            temp_IR_LH = 1'b0;
             temp_IR_Enable = 1'b1;
             temp_IR_FunSel = 2'b01;
 
@@ -977,19 +977,23 @@ endmodule
 
 module CPUSystem(
     input Clock,
-    input Reset,
-    input [7:0] T_dec,
+    output Reset,
+    output [2:0] T_out,
+    output BRA_out,
+    output [15:0] IR_out,
+    output [7:0] RF_R1,  RF_R2,  RF_R3,  RF_R4,  ARF_PC,  ARF_SP,  ARF_AR
+
 );
 
 
-    wire [7:0] RF_O1Sel;
-    wire [7:0] RF_O2Sel;
+    wire [2:0] RF_O1Sel;
+    wire [2:0] RF_O2Sel;
     wire [1:0] RF_FunSel;
     wire [3:0] RF_RSel;
     wire [3:0] RF_TSel;
     wire [3:0] ALU_FunSel;
-    wire [7:0] ARF_OutASel;
-    wire [7:0] ARF_OutBSel;
+    wire [1:0] ARF_OutASel;
+    wire [1:0] ARF_OutBSel;
     wire [1:0] ARF_FunSel;
     wire [3:0] ARF_RSel;
     wire IR_LH;
@@ -1000,6 +1004,7 @@ module CPUSystem(
     wire [1:0] MuxASel;
     wire [1:0] MuxBSel;
     wire MuxCSel;
+    wire SC_reset;
 
     wire AND;
     wire OR;
@@ -1018,7 +1023,18 @@ module CPUSystem(
     wire PUL;
     wire PSH;
 
-    wire [3:0] T_binary;
+    wire [2:0] T_binary;
+
+    wire T0, T1, T2, T3, T4, T5, T6, T7;
+
+    SeqCounter SC(
+        Clock,
+        SC_reset,
+        T_binary
+    );
+
+    Dec_8_1 SC_Decoder(T_binary, T0, T1, T2, T3, T4, T5, T6, T7);
+
     
 
     ALUSystem ALU_Sys(
@@ -1043,8 +1059,28 @@ module CPUSystem(
         .Clock(Clock)
     );
 
+    Dec_16_1 IR_Decoder(ALU_Sys.IR_Out[15:12],
+        AND,
+        OR,
+        NOT,
+        ADD,
+        SUB,
+        LSR,
+        LSL,
+        INC,
+        DEC,
+        BRA,
+        BNE,
+        MOV,
+        LD,
+        ST,
+        PUL,
+        PSH
+    );
+
+
     ControlUnit Ctrl_Unit(
-        T_dec[0], T_dec[1], T_dec[2], T_dec[3], T_dec[4], T_dec[5], T_dec[6], T_dec[7],
+        T0, T1, T2, T3, T4, T5, T6, T7,
         AND,
         OR,
         NOT,
@@ -1070,7 +1106,7 @@ module CPUSystem(
 
         ALU_Sys.ALU_FlagOut[3], ALU_Sys.ALU_FlagOut[2], ALU_Sys.ALU_FlagOut[1], ALU_Sys.ALU_FlagOut[0],
 
-        Reset,
+        SC_reset,
 
         RF_O1Sel, 
         RF_O2Sel, 
@@ -1092,31 +1128,17 @@ module CPUSystem(
         MuxCSel
     );
 
-    Dec_16_1 IR_Decoder(ALU_Sys.IR_Out[15:12],
-        AND,
-        OR,
-        NOT,
-        ADD,
-        SUB,
-        LSR,
-        LSL,
-        INC,
-        DEC,
-        BRA,
-        BNE,
-        MOV,
-        LD,
-        ST,
-        PUL,
-        PSH
-    );
 
-    SeqCounter SC(
-        Clock,
-        Reset,
-        T_binary
-    );
-
-    Dec_8_1 SC_Decoder(T_binary, T_dec[7], T_dec[6], T_dec[5], T_dec[4], T_dec[3], T_dec[2], T_dec[1], T_dec[0]);
+    assign BRA_out = BRA;
+    assign T_out = T_binary;
+    assign Reset = SC_reset;
+    assign RF_R1 = ALU_Sys.RF.R1;
+    assign RF_R2 = ALU_Sys.RF.R2;
+    assign RF_R3 = ALU_Sys.RF.R3;
+    assign RF_R4 = ALU_Sys.RF.R4;
+    assign ARF_PC = ALU_Sys.ARF.PC;
+    assign ARF_SP = ALU_Sys.ARF.SP;
+    assign ARF_AR = ALU_Sys.ARF.AR;
+    assign IR_out = ALU_Sys.IR_Out;
 
 endmodule
