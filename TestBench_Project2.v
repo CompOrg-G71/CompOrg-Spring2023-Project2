@@ -133,6 +133,7 @@ module Project2Test();
     wire [15:0] IR_out;
     wire [7:0] RF_R1,  RF_R2,  RF_R3,  RF_R4,  ARF_PC,  ARF_SP,  ARF_AR;
     wire [2:0] T;
+    wire T0, T1, T2, T3, T4, T5, T6, T7;
 
     CPUSystem CPU_Sys( 
         .Clock(Clock),
@@ -146,7 +147,15 @@ module Project2Test();
         .RF_R4(RF_R4),
         .ARF_PC(ARF_PC),
         .ARF_SP(ARF_SP),
-        .ARF_AR(ARF_AR)
+        .ARF_AR(ARF_AR),
+        .T0_out(T0),
+        .T1_out(T1),
+        .T2_out(T2),
+        .T3_out(T3),
+        .T4_out(T4),
+        .T5_out(T5),
+        .T6_out(T6),
+        .T7_out(T7)
 
     );
     always begin

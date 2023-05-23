@@ -295,7 +295,7 @@ module Memory(
     initial $readmemh("RAM.mem", RAM_DATA);
     //Read the selected data from RAM
     always @(*) begin
-        o = ~wr && ~cs ? RAM_DATA[address] : 8'hZ;
+        o = ~wr && ~cs ? RAM_DATA[address] : 8'hXX;
     end
     
     //Write the data to RAM
@@ -373,7 +373,6 @@ input      Clock
     wire [7:0] ALU_Out;
     wire [7:0] ARF_OutA, ARF_OutB;
     wire [15:0] IR_Out;
-
     wire [7:0] IR_Out_L;
 
     part2b_RF RF(Clock, MuxAOut, RF_O1Sel, RF_O2Sel, RF_FunSel, RF_RSel, RF_TSel, RF_O1, RF_O2);
@@ -474,6 +473,7 @@ endmodule
 
 
 module ControlUnit(
+    input Clock,
     input T0, T1, T2, T3, T4, T5, T6, T7,
     input AND,
     input OR,
@@ -555,7 +555,7 @@ module ControlUnit(
 
     reg temp_SC_reset = 1'b0;
 
-    always@(*) begin 
+    always@(posedge Clock) begin 
 
         if(T7) begin 
 
@@ -575,6 +575,7 @@ module ControlUnit(
 
         //Load MSB of M[PC] to IR and increment PC by one
         else if(T0) begin
+            $display("T0");
             temp_SC_reset = 1'b0;
 
             temp_IR_LH = 1'b1;
@@ -593,6 +594,7 @@ module ControlUnit(
         end
 
         else if(T1) begin 
+            $display("T1");
             temp_SC_reset = 1'b0;
 
             temp_IR_LH = 1'b0;
@@ -611,8 +613,10 @@ module ControlUnit(
 
         if(T2) begin // Conditions for second clock cycle
 
+            $display("T2");
             //Constraints before moving on, this ensures that conditions for some operations are met before executing, if not, the sequence counter is reset.
             if((BRA & AddressMode) | (BNE & AddressMode) | (ST & ~AddressMode) | (BNE & Z_Flag))begin
+                $display("why tf did I end up here");
                 temp_SC_reset <= 1'b1;
                 temp_RF_RSel <= 4'b0000;
                 temp_ARF_RSel = 4'b0000;
@@ -621,6 +625,8 @@ module ControlUnit(
             end
 
             else if(~AddressMode & ((BRA) | (BNE & ~Z_Flag)))begin // Load LSB of IR to PC
+
+                $display("T2 BRA / BNE");
 
                 temp_MuxBSel = 2'b10;
                 temp_ARF_RSel = 4'b1000;
@@ -700,6 +706,7 @@ module ControlUnit(
 
             else if(MOV|AND|OR|NOT|ADD|SUB|LSR|LSL|INC|DEC|PSH|PUL) begin // all of these operations have a common execution sequence
 
+                $display("smthn smthn");
                 temp_Mem_CS = 1'b1; // Disabling memory
                 temp_IR_Enable = 1'b0; // no writing to IR
 
@@ -864,6 +871,7 @@ module ControlUnit(
         end
 
         else if (T3) begin 
+            $display("T3");
 
             // Determining the destination Register, since we disabled all register prior to this,
             // it will result in only one register being enabled and written to
@@ -948,7 +956,6 @@ module ControlUnit(
 
         end
 
-
     end
 
 
@@ -981,7 +988,8 @@ module CPUSystem(
     output [2:0] T_out,
     output BRA_out,
     output [15:0] IR_out,
-    output [7:0] RF_R1,  RF_R2,  RF_R3,  RF_R4,  ARF_PC,  ARF_SP,  ARF_AR
+    output [7:0] RF_R1,  RF_R2,  RF_R3,  RF_R4,  ARF_PC,  ARF_SP,  ARF_AR,
+    output T0_out, T1_out, T2_out, T3_out, T4_out, T5_out, T6_out, T7_out
 
 );
 
@@ -1080,6 +1088,7 @@ module CPUSystem(
 
 
     ControlUnit Ctrl_Unit(
+        Clock,
         T0, T1, T2, T3, T4, T5, T6, T7,
         AND,
         OR,
@@ -1140,5 +1149,14 @@ module CPUSystem(
     assign ARF_SP = ALU_Sys.ARF.SP;
     assign ARF_AR = ALU_Sys.ARF.AR;
     assign IR_out = ALU_Sys.IR_Out;
+
+    assign T0_out = T0;
+    assign T1_out = T1;
+    assign T2_out = T2;
+    assign T3_out = T3;
+    assign T4_out = T4;
+    assign T5_out = T5;
+    assign T6_out = T6;
+    assign T7_out = T7;
 
 endmodule
