@@ -129,17 +129,16 @@
 module Project2Test();
     reg Clock;
     wire Reset;
-    wire BRA_out;
     wire [15:0] IR_out;
     wire [7:0] RF_R1,  RF_R2,  RF_R3,  RF_R4,  ARF_PC,  ARF_SP,  ARF_AR;
     wire [2:0] T;
     wire T0, T1, T2, T3, T4, T5, T6, T7;
-
+    wire AND_out, OR_out, NOT_out, ADD_out, SUB_out, INC_out, DEC_out,LSR_out, LSL_out, LD_out, ST_out, PSH_out, PUL_out, MOV_out, BRA_out, BNE_out;
+    wire [7:0] mem_out;
     CPUSystem CPU_Sys( 
         .Clock(Clock),
         .Reset(Reset),
         .T_out(T),
-        .BRA_out(BRA_out),
         .IR_out(IR_out),
         .RF_R1(RF_R1),
         .RF_R2(RF_R2),
@@ -155,7 +154,24 @@ module Project2Test();
         .T4_out(T4),
         .T5_out(T5),
         .T6_out(T6),
-        .T7_out(T7)
+        .T7_out(T7),
+        .AND_out(AND_out),
+        .OR_out(OR_out),
+        .NOT_out(NOT_out),
+        .ADD_out(ADD_out),
+        .SUB_out(SUB_out),
+        .INC_out(INC_out),
+        .DEC_out(DEC_out),
+        .LSR_out(LSR_out),
+        .LSL_out(LSL_out),
+        .LD_out(LD_out),
+        .ST_out(ST_out),
+        .PSH_out(PSH_out),
+        .PUL_out(PUL_out),
+        .MOV_out(MOV_out),
+        .BRA_out(BRA_out),
+        .BNE_out(BNE_out),
+        .mem_out(mem_out)
 
     );
     always begin
@@ -166,7 +182,7 @@ module Project2Test();
         $dumpfile("Project2Test.vcd");
         $dumpvars(0, Project2Test);
         
-        #1300; 
+        #1500; 
 
         $display("Project 2 testbench");
         $finish;
